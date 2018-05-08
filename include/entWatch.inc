@@ -1,3 +1,19 @@
+/******************************************************************/
+/*                                                                */
+/*                           entWatch                             */
+/*                                                                */
+/*                                                                */
+/*  File:          entWatch.inc                                   */
+/*  Description:   Notify players about entity interactions.      */
+/*                                                                */
+/*                                                                */
+/*  Copyright (C) 2018  Kyle                                      */
+/*  2018/05/08 20:13:14                                           */
+/*                                                                */
+/*  This code is licensed under the GPLv3 License.                */
+/*                                                                */
+/******************************************************************/
+
 #if defined _EntWatch_Include_
     #endinput
 #endif

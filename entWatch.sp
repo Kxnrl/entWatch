@@ -1,3 +1,19 @@
+/******************************************************************/
+/*                                                                */
+/*                           entWatch                             */
+/*                                                                */
+/*                                                                */
+/*  File:          entWatch.sp                                    */
+/*  Description:   Notify players about entity interactions.      */
+/*                                                                */
+/*                                                                */
+/*  Copyright (C) 2018  Kyle                                      */
+/*  2018/05/08 20:13:14                                           */
+/*                                                                */
+/*  This code is licensed under the GPLv3 License.                */
+/*                                                                */
+/******************************************************************/
+
 #pragma semicolon 1
 #pragma newdecls required
 
@@ -15,7 +31,7 @@
 #define PI_NAME "[CSGO] entWatch"
 #define PI_AUTH "Kyle"
 #define PI_DESC "Notify players about entity interactions."
-#define PI_VERS "1.0.0"
+#define PI_VERS "1.0.1"
 #define PI_URLS "https://kxnrl.com"
 
 public Plugin myinfo = 
@@ -39,7 +55,6 @@ enum Entity
 {
     String:ent_name[32],
     String:ent_short[32],
-    String:ent_trans[32],
     String:ent_buttonclass[32],
     String:ent_filtername[32],
     bool:ent_hasfiltername,
@@ -103,14 +118,8 @@ char g_szClantag[MAXPLY][32];
 
 float g_fPickup[MAXPLY] = {0.0, ...};
 
-#if defined __ZombieEscape__
 bool g_pZombieEscape = false;
-#endif
-
-#if defined __zombiereloaded__
 bool g_pZombieReload = false;
-#endif
-
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
@@ -228,7 +237,6 @@ public void OnConfigsExecuted()
     for(int index = 0; index < MAXENT; index++)
     {
         g_EntArray[index][ent_name][0]        = '\0';
-        g_EntArray[index][ent_trans][0]       = '\0';
         g_EntArray[index][ent_short][0]       = '\0';
         g_EntArray[index][ent_buttonclass][0] = '\0';
         g_EntArray[index][ent_filtername][0]  = '\0';
@@ -410,7 +418,7 @@ public Action Timer_RoundStart(Handle timer)
 {
     g_tRound = INVALID_HANDLE;
     
-    ChatAll("\x04当前服务器已启动entWatch");
+    ChatAll("\x07当前服务器已启动entWatch \x0A::\x04Kyle Present\x0A::");
 
     char classname[32];
     int hammerid;
@@ -649,7 +657,6 @@ public Action Timer_CheckFilter(Handle timer, DataPack pack)
 
     // set name
     kv.SetString("name",      targetname);
-    kv.SetString("transname", targetname);
     kv.SetString("shortname", targetname);
  
     // set button
@@ -994,7 +1001,7 @@ void BuildHUDandScoreboard(int index)
         return;
 
     char szClantag[32], szGameText[128];
-    strcopy(szClantag, 32, g_EntArray[index][ent_name]);
+    strcopy(szClantag, 32, g_EntArray[index][ent_short]);
 
     if(ClientIsAlive(g_EntArray[index][ent_ownerid]))
     {   
@@ -1442,9 +1449,6 @@ static void LoadConfig()
                 kv.GetString("name", temp, 32);
                 strcopy(g_EntArray[g_iEntCounts][ent_name], 32, temp);
 
-                kv.GetString("transname", temp, 32);
-                strcopy(g_EntArray[g_iEntCounts][ent_trans], 32, temp);
-                
                 kv.GetString("shortname", temp, 32);
                 strcopy(g_EntArray[g_iEntCounts][ent_short], 32, temp);
                 
@@ -1723,17 +1727,11 @@ static void ClearIcon(int client)
 
 static bool IsInfector(int client)
 {
-#if defined __ZombieEscape__
-    if(!g_pZombieEscape)
-        return (GetClientTeam(client) == 2);
+    if(g_pZombieEscape)
+        return (ZE_IsInfector(client) || ZE_IsAvenger(client));
 
-    return ZE_IsInfector(client);
-#elif defined __zombiereloaded__
-    if(!g_pZombieReload)
-        return (GetClientTeam(client) == 2);
+    if(g_pZombieReload)
+        return ZR_IsClientZombie(client);
 
-    return ZR_IsClientZombie(client);
-#else
     return (GetClientTeam(client) == 2);
-#endif
 }
