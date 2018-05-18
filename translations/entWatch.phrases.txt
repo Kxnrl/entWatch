@@ -1,0 +1,201 @@
+"Phrases"
+{
+    "disconnected with ent"
+	{
+		"#format"	"{1:N},{2:s}"
+		"en"		"{blue}{1} {normal}disconnected with {green}{2}"
+		"chi"		"{blue}{1} {normal}离开游戏时带着神器{green}{2}"
+		"zho"		"{blue}{1} {normal}離開時帶著神器{green}{2}"
+	}
+    
+    "died with ent"
+	{
+		"#format"	"{1:N},{2:s}"
+		"en"		"{blue}{1} {normal}has died with {green}{2}"
+		"chi"		"{blue}{1} {normal}死亡时带着神器{green}{2}"
+		"zho"		"{blue}{1} {normal}死亡時帶著神器{green}{2}"
+	}
+    
+    "pickup ent"
+	{
+		"#format"	"{1:N},{2:s}"
+		"en"		"{blue}{1} {normal}has picked up {green}{2}"
+		"chi"		"{blue}{1} {normal}捡起了神器{green}{2}"
+		"zho"		"{blue}{1} {normal}撿起了神器{green}{2}"
+	}
+	
+	"droped ent"
+	{
+		"#format"	"{1:N},{2:s}"
+		"en"		"{blue}{1} {normal}has dropped {green}{2}"
+		"chi"		"{blue}{1} {normal}丟掉了神器{green}{2}"
+		"zho"		"{blue}{1} {normal}丟掉了神器{green}{2}"
+	}
+
+	"has been banned centertext"
+	{
+		"en"		"you have been banned ent."
+		"chi"		"你被BAN了神器"
+		"zho"		"你被BAN了神器"
+	}
+    
+    "used ent and cooldown"
+	{
+		"#format"	"{1:N},{2:s},{3:d}"
+		"en"		"{blue}{1} {normal}used {green}{2}{normal} [{green}CD{normal}:{red}{3}{green}s{normal}]"
+		"chi"		"{blue}{1}{normal}使用了神器{green}{2}{normal}[{green}CD{normal}:{red}{3}{green}秒{normal}]"
+		"zho"		"{blue}{1}{normal}使用了神器{green}{2}{normal}[{green}CD{normal}:{red}{3}{green}秒{normal}]"
+	}
+	
+	"used ent and maxuses"
+	{
+		"#format"	"{1:N},{2:s},{3:d}"
+		"en"		"{blue}{1} {normal}used {green}{2}{normal} [{green}Remaining{normal}:{red}{3}{green}time(s){normal}]"
+		"chi"		"{blue}{1}{normal}使用了神器{green}{2}{normal}[{green}剩余{normal}:{red}{3}{green}次{normal}]"
+		"zho"		"{blue}{1}{normal}使用了神器{green}{2}{normal}[{green}還有{normal}:{red}{3}{green}次{normal}]"
+	}
+	
+	"used ent and cd maxuses"
+	{
+		"#format"	"{1:N},{2:s},{3:d},{4:d}"
+		"en"		"{blue}{1} {normal}used {green}{2}{normal} [{green}CD{normal}:{red}{3}s{normal}|{green}Remaining{normal}:{red}{4}{green}time(s){normal}]"
+		"chi"		"{blue}{1}{normal}使用了神器{green}{2}{normal}[{green}CD{normal}:{red}{3}s{normal}|{green}剩余{normal}:{red}{4}{green}次{normal}]"
+		"zho"		"{blue}{1}{normal}使用了神器{green}{2}{normal}[{green}CD{normal}:{red}{3}s{normal}|{green}還有{normal}:{red}{4}{green}次{normal}]"
+	}
+	
+	"used ent and times cd"
+	{
+		"#format"	"{1:N},{2:s},{3:d}"
+		"en"		"{blue}{1} {normal}used {green}{2}{normal} [used{red}{3}{green}time(s){normal} into cooldown]"
+		"chi"		"{blue}{1}{normal}使用了神器{green}{2}{normal}[{green}使用{3}次后冷却{normal}]"
+		"zho"		"{blue}{1}{normal}使用了神器{green}{2}{normal}[{green}使用{3}次后凍結{normal}]"
+	}
+	
+	"used ent and used times into cd"
+	{
+		"#format"	"{1:s},{2:d}"
+		"en"		"{green}{1}{normal} [{green}CD{normal}:{red}{2}{green}s{normal}]"
+		"chi"		"神器{green}{1}{normal}[{green}CD{normal}:{red}{2}{green}秒{normal}]"
+		"zho"		"神器{green}{1}{normal}[{green}CD{normal}:{red}{2}{green}秒{normal}]"
+	}
+	
+	"cooldown end"
+	{
+		"#format"	"{1:N},{2:s}"
+		"en"		"{blue}{1}{green}`s {red}{2} {green} cooling time is over"
+		"chi"		"{blue}{1}{green}所持的{red}{2}{green}冷却时间已结束"
+		"zho"		"{blue}{1}{green}拿著的{red}{2}{green}冷却時間已經完了"
+	}
+	
+	"cooldown end no owner"
+	{
+		"#format"	"{1:s}"
+		"en"		"{red}{1} {green} cooling time is over{normal}[{red}Nobody use{normal}]"
+		"chi"		"{red}{1}{green}冷却时间已结束{normal}[{red}无人使用{normal}]"
+		"zho"		"{red}{1}{green}冷卻時間已經完了{normal}[{red}无人使用{normal}]"
+	}
+	
+	"cooldown end centertext"
+	{
+		"#format"	"{1:s}"
+		"en"		"<font color='#993300' size='25'>{1}</font><font size='25'>: </font><font color='#0066CC'>cooling time is over"
+		"chi"		"<font color='#993300' size='25'>{1}</font><font size='25'>: </font><font color='#0066CC'>冷却时间已结束"
+		"zho"		"<font color='#993300' size='25'>{1}</font><font size='25'>: </font><font color='#0066CC'>冷卻時間已經完了"
+	}
+	
+	"ban ent"
+	{
+		"#format"	"{1:N},{2:N},{3:s}"
+		"en"		"{green}{2}{normal}: Ent Banned player {red}{1}  [[{3}]]"
+		"chi"		"小朋友{red}{1}{normal}因为乱玩神器,被dalao{green}{2} {red}ban神器[{3}]"
+		"zho"		"小朋友{red}{1}{normal}因为乱玩神器,被大神{green}{2} {red}ban神器[{3}]"
+	}
+	
+	"unban ent"
+	{
+		"#format"	"{1:N},{2:N}"
+		"en"		"{green}{2}{normal}: Removed {red}{1}{normal}`s ent ban.}"
+		"chi"		"小朋友{red}{1}{normal}的{red}ban神器{normal}被dalao{green}{2}{normal}解开了"
+		"zho"		"小朋友{red}{1}{normal}的{red}ban神器{normal}被dalao{green}{2}{normal}解开了"
+	}
+
+	"ent dropped"
+	{
+		"#format"	"{1:s}"
+		"en"		"{green}{1}{blue}dropped{normal}."
+		"chi"		"{green}{1}{blue}已掉落"
+		"zho"		"{green}{1}{blue}掉了"
+	}
+	
+	"transfer ent"
+	{
+		"#format"	"{1:N},{2:N},{3:s}"
+		"en"		"{green}{1}{normal}: capture {red}{2}{normal}`s {green}{3}{normal}.}"
+		"chi"		"{blue}{1}{normal}拿走了{blue}{2}{normal}手上的神器{green}{3}"
+		"zho"		"{blue}{1}{normal}搶去了{blue}{2}{normal}手上的神器{green}{3}"
+	}
+    
+    "welcome message"
+    {
+        "en"		"{red}This server are using entWatch! {silver}::{green}Kyle Present{silver}::"
+		"chi"		"{red}当前服务器已启动entWatch! {silver}::{green}Kyle Present{silver}::"
+    }
+    
+    "Item"
+    {
+        "en"        "Item"
+        "chi"       "神器"
+    }
+    
+    "Ready"
+    {
+        "en"        "Ready"
+        "chi"       "就绪"
+    }
+    
+    "permanent"
+    {
+        "en"        "permanent"
+        "chi"       "永久"
+    }
+    
+    "1 hour"
+    {
+        "en"        "1 Hour"
+        "chi"       "1小时"
+    }
+    
+    "1 day"
+    {
+        "en"        "1 Day"
+        "chi"       "1天"
+    }
+    
+    "1 week"
+    {
+        "en"        "1 Week"
+        "chi"       "1周"
+    }
+    
+    "ent data not cached"
+	{
+		"en"		"please wait for loding your data!"
+		"chi"		"请等待你的数据加载完毕..."
+		"zho"		"請等待你的數據加載完成..."
+	}
+	
+	"ent not ban"
+	{
+		"en"		"You are not restricted"
+		"chi"		"你的神器信用等级{green}良好{normal}..."
+		"zho"		"你的神器信用等級{green}良好{normal}..."
+	}
+	
+	"ent ban info"
+	{
+		"#format"	"{1:s},{2:s}"
+		"en"		"you go a ban by {1} [Expired: {2}]"
+		"chi"		"你的神器被 {blue}{1}{normal} 封禁了 [到期时间 {red}{2}{normal}]"
+		"zho"		"你的神器被 {blue}{1}{normal} 封禁了 [到期时间 {red}{2}{normal}]"
+	}
+}

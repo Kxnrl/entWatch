@@ -26,12 +26,14 @@
 #undef REQUIRE_PLUGIN
 #tryinclude <ZombieEscape>
 #tryinclude <zombiereloaded>
+#define REQUIRE_PLUGIN
 
+#define USE_TRANSLATIONS  // if load translations
 
 #define PI_NAME "[CSGO] entWatch"
 #define PI_AUTH "Kyle"
 #define PI_DESC "Notify players about entity interactions."
-#define PI_VERS "1.0.1"
+#define PI_VERS "1.1.0"
 #define PI_URLS "https://kxnrl.com"
 
 public Plugin myinfo = 
@@ -206,6 +208,10 @@ public void OnPluginStart()
 
     g_hHudSyncer[ZOMBIE] = CreateHudSynchronizer();
     g_hHudSyncer[HUMANS] = CreateHudSynchronizer();
+    
+#if defined USE_TRANSLATIONS
+    LoadTranslations("entWatch.phrases");
+#endif
 
     for(int client = 1; client <= MaxClients; ++client)
         if(ClientIsValid(client))
@@ -360,8 +366,12 @@ public void OnClientDisconnect(int client)
             Call_PushCell(DR_OnDisconnect);
             Call_PushString(g_EntArray[index][ent_name]);
             Call_Finish();
-            
+
+#if defined USE_TRANSLATIONS
+            tChatTeam(g_EntArray[index][ent_team], true, "%t", "disconnected with ent", client, g_EntArray[index][ent_name]);
+#else
             ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01离开游戏时带着神器\x04%s", client, g_EntArray[index][ent_name]);
+#endif
         }
     }
 
@@ -417,8 +427,12 @@ public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 public Action Timer_RoundStart(Handle timer)
 {
     g_tRound = INVALID_HANDLE;
-    
+
+#if defined USE_TRANSLATIONS
+    tChatAll("%t", "welcome message");
+#else
     ChatAll("\x07当前服务器已启动entWatch \x0A::\x04Kyle Present\x0A::");
+#endif
 
     char classname[32];
     int hammerid;
@@ -481,8 +495,12 @@ public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast
     Call_PushCell(DR_OnDeath);
     Call_PushString(g_EntArray[index][ent_name]);
     Call_Finish();
-    
+
+#if defined USE_TRANSLATIONS
+    tChatTeam(g_EntArray[index][ent_team], true, "%t", "died with ent", client, g_EntArray[index][ent_name]);
+#else
     ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01死亡时带着神器\x04%s", client, g_EntArray[index][ent_name]);
+#endif
 
     RefreshHud();
     SetClientDefault(client);
@@ -535,8 +553,12 @@ public void Event_WeaponEquipPost(int client, int weapon)
         }
     }
 
+#if defined USE_TRANSLATIONS
+    tChatTeam(g_EntArray[index][ent_team], true, "%t", "pickup ent", client, g_EntArray[index][ent_name]);
+#else
     ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01捡起了神器\x04%s", client, g_EntArray[index][ent_name]);
-    
+#endif
+
     Call_StartForward(g_Forward[OnPicked]);
     Call_PushCell(client);
     Call_PushString(g_EntArray[index][ent_name]);
@@ -554,7 +576,7 @@ static void CheckPreConfigs(int client, int weapon)
     // if was stored.
     if(g_aPreHammerId.FindValue(hammerid) != -1)
     {
-        //ChatAll("\x04预配置文件检查\x01->\x10该神器已被记录\x01[\x07%d\x01]", hammerid);
+        ChatAll("\x04entWatch PreConfigs \x01->\x10 Already record \x01[\x07%d\x01]", hammerid);
         return;
     }
 
@@ -562,7 +584,7 @@ static void CheckPreConfigs(int client, int weapon)
     char targetname[128];
     GetEntityTargetName(weapon, targetname, 128);
 
-    ChatAll("\x04预配置文件检查\x01->\x05targetname\x01[\x07%s\x01]", targetname);
+    ChatAll("\x04entWatch PreConfigs \x01->\x05 targetname\x01[\x07%s\x01]", targetname);
 
     if(targetname[0] == '\0')
         return;
@@ -586,7 +608,7 @@ static void CheckPreConfigs(int client, int weapon)
     if(!found)
         button = -1;
 
-    ChatAll("\x04预配置文件检查\x01->\x05funcbutton\x01[\x07%d\x01]", button);
+    ChatAll("\x04entWatch PreConfigs \x01->\x05 funcbutton\x01[\x07%d\x01]", button);
     
     DataPack pack;
     CreateDataTimer(0.2, Timer_CheckFilter, pack);
@@ -615,7 +637,7 @@ public Action Timer_CheckFilter(Handle timer, DataPack pack)
     char filtername[128], clientname[128];
     GetEntityTargetName(client, clientname, 128);
 
-    ChatAll("\x04预配置文件检查\x01->\x05clientname\x01[\x07%s\x01]", clientname);
+    ChatAll("\x04entWatch PreConfigs \x01->\x05 clientname\x01[\x07%s\x01]", clientname);
     
     int iFilter = -1;
     bool found = false;
@@ -633,7 +655,7 @@ public Action Timer_CheckFilter(Handle timer, DataPack pack)
     if(!found)
         strcopy(filtername, 128, "null");
 
-    ChatAll("\x04预配置文件检查\x01->\x05filtername\x01[\x07%s\x01]", filtername);
+    ChatAll("\x04entWatch PreConfigs \x01->\x05 filtername\x01[\x07%s\x01]", filtername);
 
     KeyValues kv = new KeyValues("entWatchPre");
 
@@ -674,7 +696,6 @@ public Action Timer_CheckFilter(Handle timer, DataPack pack)
     kv.SetString("maxuses",   "0");
     kv.SetString("cooldown",  "0");
     kv.SetString("maxamount", "1");
-    kv.SetString("request",   "200");
     kv.SetString("glow",      "true");
     kv.SetString("team",      IsInfector(client) ? "zombie" : "human");
     kv.SetString("hud",       "true");
@@ -689,7 +710,7 @@ public Action Timer_CheckFilter(Handle timer, DataPack pack)
     // store in array
     g_aPreHammerId.Push(hammerid);
     
-    ChatAll("\x04预配置文件检查\x01->\x10已自动记录该神器", filtername);
+    ChatAll("\x04entWatch PreConfigs \x01->\x10 Record the data successfully", filtername);
 
     return Plugin_Stop;
 }
@@ -717,7 +738,11 @@ public void Event_WeaponDropPost(int client, int weapon)
                 if(g_EntArray[index][ent_buttonid] != -1)
                     SDKUnhook(g_EntArray[index][ent_buttonid], SDKHook_Use, Event_ButtonUse);
 
+#if defined USE_TRANSLATIONS
+                tChatTeam(g_EntArray[index][ent_team], true, "%t", "droped ent", client, g_EntArray[index][ent_name]);
+#else
                 ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01丟掉了神器\x04%s", client, g_EntArray[index][ent_name]);
+#endif
 
                 RefreshHud();
                 
@@ -808,7 +833,11 @@ static bool CanClientUseEnt(int client)
 {
     if(g_bBanned[client])
     {
+#if defined USE_TRANSLATIONS
+        Text(client, "%t", "has been banned centertext");
+#else
         Text(client, "你神器被BAN了,\n请到论坛申诉!");
+#endif
         return false;
     }
 
@@ -859,8 +888,12 @@ public Action Event_ButtonUse(int button, int activator, int caller, UseType typ
     else if(g_EntArray[index][ent_mode] == 2 && g_EntArray[index][ent_cooldowntime] <= 0)
     {
         g_EntArray[index][ent_cooldowntime] = g_EntArray[index][ent_cooldown];
-        
+
+#if defined USE_TRANSLATIONS
+        tChatTeam(g_EntArray[index][ent_team], true, "%t", "used ent and cooldown", activator, g_EntArray[index][ent_name], g_EntArray[index][ent_cooldown]);
+#else
         ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01使用了神器\x04%s\x01[\x04CD\x01:\x07%d\x04秒\x01]", activator, g_EntArray[index][ent_name], g_EntArray[index][ent_cooldown]);
+#endif
 
         RefreshHud();
         AddClientScore(activator, 3);
@@ -870,8 +903,12 @@ public Action Event_ButtonUse(int button, int activator, int caller, UseType typ
     else if(g_EntArray[index][ent_mode] == 3 && g_EntArray[index][ent_uses] < g_EntArray[index][ent_maxuses], activator, g_EntArray[index][ent_name], g_EntArray[index][ent_maxuses]-g_EntArray[index][ent_uses])
     {
         g_EntArray[index][ent_uses]++;
-        
+
+#if defined USE_TRANSLATIONS
+        tChatTeam(g_EntArray[index][ent_team], true, "%t", "used ent and maxuses", activator, g_EntArray[index][ent_name], g_EntArray[index][ent_maxuses]-g_EntArray[index][ent_uses]);
+#else       
         ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01使用了神器\x04%s\x01[\x04剩余\x01:\x07%d\x04次\x01]", activator, g_EntArray[index][ent_name], g_EntArray[index][ent_maxuses]-g_EntArray[index][ent_uses]);
+#endif
 
         RefreshHud();
         AddClientScore(activator, 3);
@@ -882,8 +919,12 @@ public Action Event_ButtonUse(int button, int activator, int caller, UseType typ
     {
         g_EntArray[index][ent_cooldowntime] = g_EntArray[index][ent_cooldown];
         g_EntArray[index][ent_uses]++;
-        
+
+#if defined USE_TRANSLATIONS
+        tChatTeam(g_EntArray[index][ent_team], true, "%t", "used ent and cd maxuses", activator, g_EntArray[index][ent_name], g_EntArray[index][ent_cooldown], g_EntArray[index][ent_maxuses]-g_EntArray[index][ent_uses]);
+#else
         ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01使用了神器\x04%s\x01[\x04CD\x01:\x07%ds\x01|\x04剩余\x01:\x07%d\x04次\x01]", activator, g_EntArray[index][ent_name], g_EntArray[index][ent_cooldown], g_EntArray[index][ent_maxuses]-g_EntArray[index][ent_uses]);
+#endif
         
         RefreshHud();
         AddClientScore(activator, 5);
@@ -892,13 +933,21 @@ public Action Event_ButtonUse(int button, int activator, int caller, UseType typ
     }
     else if(g_EntArray[index][ent_mode] == 5 && g_EntArray[index][ent_cooldowntime] <= 0)
     {
+#if defined USE_TRANSLATIONS
+        tChatTeam(g_EntArray[index][ent_team], true, "%t", "used ent and times cd", activator, g_EntArray[index][ent_name], g_EntArray[index][ent_maxuses]-g_EntArray[index][ent_uses]);
+#else
         ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01使用了神器\x04%s\x01[\x04使用%d次后冷却\x01]", activator, g_EntArray[index][ent_name], g_EntArray[index][ent_maxuses]-g_EntArray[index][ent_uses]);
+#endif
 
         g_EntArray[index][ent_uses]++;
         
         if(g_EntArray[index][ent_uses] >= g_EntArray[index][ent_maxuses])
         {
+#if defined USE_TRANSLATIONS
+            tChatTeam(g_EntArray[index][ent_team], true, "%t", "used ent and used times into cd", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldown]);
+#else
             ChatTeam(g_EntArray[index][ent_team], true, "神器\x04%s\x01[\x04CD\x01:\x07%d\x04秒\x01]", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldown]);
+#endif
 
             g_EntArray[index][ent_cooldowntime] = g_EntArray[index][ent_cooldown];
             g_EntArray[index][ent_uses] = 0;
@@ -942,10 +991,10 @@ static void RefreshHud()
     }
 
     if(strcmp(g_szGlobalHud[ZOMBIE], "[!ehud] Zombie entWatch: ") == 0)
-        Format(g_szGlobalHud[ZOMBIE], 2048, "%s\n当前无人拾取神器", g_szGlobalHud[ZOMBIE]);
+        Format(g_szGlobalHud[ZOMBIE], 2048, "%s\n", g_szGlobalHud[ZOMBIE]);
 
     if(strcmp(g_szGlobalHud[HUMANS], "[!ehud] Humans entWatch: ") == 0)
-        Format(g_szGlobalHud[HUMANS], 2048, "%s\n当前无人拾取神器", g_szGlobalHud[HUMANS]);
+        Format(g_szGlobalHud[HUMANS], 2048, "%s\n", g_szGlobalHud[HUMANS]);
 
     SetHudTextParams(0.160500, 0.099000, 2.0, 57, 197, 187, 255, 0, 30.0, 0.0, 0.0);
 
@@ -971,13 +1020,21 @@ void CountdownMessage(int index)
             else
             {
                 SetHudTextParams(-1.0, 0.05, 2.0, 0, 255, 0, 255, 0, 30.0, 0.0, 0.0);
+#if defined USE_TRANSLATIONS
+                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer[COOLDN], "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Ready");
+#else
                 ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer[COOLDN], "神器[%s]就绪", g_EntArray[index][ent_name]);
+#endif
             }
         }
         else if(g_EntArray[index][ent_cooldowntime] == 1)
         {
             SMUtils_SkipNextChatCS();
+#if defined USE_TRANSLATIONS
+            tChatTeam(g_EntArray[index][ent_team], true, "%t", "cooldown end no owner", g_EntArray[index][ent_name]);
+#else        
             ChatTeam(g_EntArray[index][ent_team], true, "\x07%s\x04冷却时间已结束\x01[\x07无人使用\x01]", g_EntArray[index][ent_name]);
+#endif
         }
     }
     else if(ClientIsValid(g_EntArray[index][ent_ownerid]))
@@ -985,12 +1042,20 @@ void CountdownMessage(int index)
         if(g_EntArray[index][ent_mode] == 3 && g_EntArray[index][ent_uses] >= g_EntArray[index][ent_maxuses])
         {
             SetHudTextParams(-1.0, 0.05, 2.0, 255, 0, 0, 233, 0, 30.0, 0.0, 0.0);
+#if defined USE_TRANSLATIONS
+            ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer[COOLDN], "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Deplete");
+#else
             ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer[COOLDN], "神器[%s]耗尽", g_EntArray[index][ent_name]);
+#endif
         }
         else
         {
             SetHudTextParams(-1.0, 0.05, 2.0, 0, 255, 0, 255, 0, 30.0, 0.0, 0.0);
-            ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer[COOLDN], "神器[%s]就绪", g_EntArray[index][ent_name]);
+#if defined USE_TRANSLATIONS
+                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer[COOLDN], "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Ready");
+#else
+                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer[COOLDN], "神器[%s]就绪", g_EntArray[index][ent_name]);
+#endif
         }
     }
 }
@@ -1053,13 +1118,21 @@ public Action Command_Stats(int client, int args)
 {
     if(!AreClientCookiesCached(client))
     {
+#if defined USE_TRANSLATIONS
+        Chat(client, "%T", client, "ent data not cached");
+#else
         Chat(client, "请等待你的数据加载完毕...");
+#endif
         return Plugin_Handled;
     }
 
     if(!g_bBanned[client])
     {
+#if defined USE_TRANSLATIONS
+        Chat(client, "%T", client, "ent not ban");
+#else
         Chat(client, "你的神器信用等级\x04良好\x01...");
+#endif
         return Plugin_Handled;
     }
 
@@ -1069,8 +1142,12 @@ public Action Command_Stats(int client, int args)
     
     int exp = StringToInt(buffer_timer);
     FormatTime(buffer_timer, 32, "%Y/%m/%d - %H:%M:%S", exp);
-    
+
+#if defined USE_TRANSLATIONS
+    Chat(client, "%T", client, "ent ban info", buffer_admin, buffer_timer);
+#else
     Chat(client, "你的神器被 \x0C%N\x01 封禁了 [到期时间 \x07%s\x01]", buffer_admin, buffer_timer);
+#endif
 
     return Plugin_Handled;
 }
@@ -1079,13 +1156,17 @@ public Action Command_DisplayHud(int client, int args)
 {
     if(!AreClientCookiesCached(client))
     {
+#if defined USE_TRANSLATIONS
+        Chat(client, "%T", client, "ent data not cached");
+#else
         Chat(client, "请等待你的数据加载完毕...");
+#endif
         return Plugin_Handled;
     }
 
     g_bEntHud[client] = !g_bEntHud[client];
     
-    Chat(client, "HUD信息显示\x02%s\x01!", g_bEntHud[client] ? "\x07关闭\x01" : "\x04开启\x01");
+    Chat(client, "entWatch HUD is \x02%s\x01!", g_bEntHud[client] ? "\x07Off\x01" : "\x04On\x01");
 
     return Plugin_Handled;
 }
@@ -1119,7 +1200,7 @@ public Action Command_Restrict(int client, int args)
     }
     else
     {
-        Chat(client, "目前没有对象可用于eBan");
+        Chat(client, "No player in target list");
         delete menu;
     }
 
@@ -1142,14 +1223,14 @@ void BuildBanLengthMenu(int client, const char[] target)
 {
     Menu menu = new Menu(MenuHandler_Time);
     
-    menu.SetTitle("[entWatch]  选择时长\n ");
+    menu.SetTitle("[entWatch]  Select Time\n ");
 
     menu.AddItem(target, "", ITEMDRAW_IGNORE);
 
-    menu.AddItem("1",   "1时");
-    menu.AddItem("2",   "1天");
-    menu.AddItem("168", "1周");
-    menu.AddItem("0",   "永久");
+    menu.AddItem("1",   "1 Hour");
+    menu.AddItem("2",   "1 Day");
+    menu.AddItem("168", "1 Week");
+    menu.AddItem("0",   "Permanent");
 
     menu.Display(client, 30);
 }
@@ -1173,7 +1254,7 @@ static void BanClientEnt(int client, int target, int time)
 {
     if(!ClientIsValid(target))
     {
-        Chat(client, "目前对象已离开服务器");
+        Chat(client, "Target is not in server");
         return;
     }
 
@@ -1194,8 +1275,13 @@ static void BanClientEnt(int client, int target, int time)
             {
                 SDKHooks_DropWeapon(target, weapon);
                 RequestFrame(SetWeaponGlow, index);
+
+#if defined USE_TRANSLATIONS
+                tChatTeam(g_EntArray[index][ent_team], true, "%t", "ent dropped", g_EntArray[index][ent_name]);
+#else
                 ChatTeam(g_EntArray[index][ent_team], true, "\x04%s\x0C已掉落", g_EntArray[index][ent_name]);
-                
+#endif
+
                 Call_StartForward(g_Forward[OnDropped]);
                 Call_PushCell(client);
                 Call_PushCell(DR_OnBanned);
@@ -1221,6 +1307,15 @@ static void BanClientEnt(int client, int target, int time)
     SetClientCookie(target, g_Cookies[BanByAdmin], szAdmin);
     SetClientCookie(target, g_Cookies[BanTLength], szTime);
 
+#if defined USE_TRANSLATIONS
+    switch(time)
+    {
+        case   0: FormatEx(szTime, 32, "%T", client, "permanent");
+        case   1: FormatEx(szTime, 32, "%T", client, "1 hour");
+        case  24: FormatEx(szTime, 32, "%T", client, "1 day");
+        case 168: FormatEx(szTime, 32, "%T", client, "1 week");
+    }
+#else
     switch(time)
     {
         case   0: strcopy(szTime, 32, "永久");
@@ -1228,13 +1323,19 @@ static void BanClientEnt(int client, int target, int time)
         case  24: strcopy(szTime, 32, "1天");
         case 168: strcopy(szTime, 32, "1周");
     }
-    
+#endif
+
     Call_StartForward(g_Forward[OnBanned]);
     Call_PushCell(target);
     Call_Finish();
 
+#if defined USE_TRANSLATIONS
+    tChatAll("%t", "ban ent", target, client, szTime);
+#else
     ChatAll("小朋友\x07%N\x01因为乱玩神器,被dalao\x04%N\x07ban神器[%s]", target, client, szTime);
-    LogAction(client, -1, "%L eban=> %L => %s", client, target, szTime);
+#endif
+
+    LogAction(client, -1, "%L ban %L => %s [entWatch]", client, target, szTime);
 }
 
 public Action Command_Unrestrict(int client, int args)
@@ -1266,7 +1367,7 @@ public Action Command_Unrestrict(int client, int args)
     }
     else
     {
-        Chat(client, "目前没有对象被Ban神器");
+        Chat(client, "No player in ban list");
         delete menu;
     }
 
@@ -1295,7 +1396,7 @@ void UnestrictClientEnt(int client, int target)
     
     if(!ClientIsValid(target))
     {
-        Chat(client, "[\x07地图神器\x01]  目前对象已离开服务器");
+        Chat(client, "Target is not in server.");
         return;
     }
 
@@ -1304,9 +1405,14 @@ void UnestrictClientEnt(int client, int target)
     SetClientCookie(target, g_Cookies[BanTLength], "-1");
     SetClientCookie(target, g_Cookies[BanByAdmin], "null");
 
+#if defined USE_TRANSLATIONS
+    tChatAll("%t", "unban ent", target, client);
+#else
     ChatAll("小朋友\x07%N\x01的\x07ban神器\x01被dalao\x04%N\x01解开了", target, client);
-    LogAction(client, -1, "%L 解开了 %L 的ban神器", client, target);
-    
+#endif
+
+    LogAction(client, -1, "%L unban %L [entWatch]", client, target);
+
     Call_StartForward(g_Forward[OnUnban]);
     Call_PushCell(target);
     Call_Finish();
@@ -1347,7 +1453,7 @@ public Action Command_Transfer(int client, int args)
     }
     else
     {
-        Chat(client, "[\x07地图神器\x01]  目前没有对象持有神器");
+        Chat(client, "No one pickup item.");
         CloseHandle(menu);
     }
     
@@ -1375,7 +1481,7 @@ static void TransferClientEnt(int client, int target)
 {
     if(!ClientIsAlive(target))
     {
-        Chat(client, "目前对象无效");
+        Chat(client, "Target is invalid.");
         return;
     }
 
@@ -1396,9 +1502,13 @@ static void TransferClientEnt(int client, int target)
     GivePlayerItem(target, buffer_classname);
     EquipPlayerWeapon(client, weapon);
 
+#if defined USE_TRANSLATIONS
+    tChatAll("%t", "transfer ent", client, target, g_EntArray[index][ent_name]);
+#else
     ChatAll("\x0C%N\x01拿走了\x0C%N\x01手上的神器[\x04%s\x01]", client, target, g_EntArray[index][ent_name]);
+#endif
 
-    LogAction(client, -1, "%L 拿走了 %L 的神器 %s", client, target, g_EntArray[index][ent_name]);
+    LogAction(client, -1, "%L transfer %L item %s [entWatch]", client, target, g_EntArray[index][ent_name]);
 
     RemoveWeaponGlow(index);
     

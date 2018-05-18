@@ -1,0 +1,19 @@
+"entities"
+{
+    "0"
+    {
+        "name"              "英文名"            // string 最多12个字  (max size 16 bytes)
+        "shortname"         "计分板名字"        // string 强制2个汉字 (max size 10 bytes)
+        "buttonclass"       "func_button"       // string classname
+        "filtername"        "filter name"       // string
+        "hasfiltername"     "true"              // true or false
+        "hammerid"          "Hammer ID"         // numberic
+        "mode"              "1"                 // numberic 0 = No button, 1 = Spam protection only, 2 = Cooldowns, 3 = Limited uses, 4 = Limited uses with cooldowns, 5 = Cooldowns after multiple uses. 
+        "maxuses"           "0"                 // numberic request mode 3/4
+        "cooldown"          "60"                // numberic
+        "maxamount"         "1"                 // numberic
+        "glow"              "true"              // true or false
+        "team"              "human"             // human or zombie
+        "hud"               "true"              // true or false
+    }
+}
