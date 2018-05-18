@@ -24,8 +24,8 @@
 #include <entWatch>
 
 #undef REQUIRE_PLUGIN
-#tryinclude <ZombieEscape>
-#tryinclude <zombiereloaded>
+#include <ZombieEscape>
+#include <zombiereloaded>
 #define REQUIRE_PLUGIN
 
 #define USE_TRANSLATIONS  // if load translations
@@ -131,15 +131,10 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
     CreateNative("entWatch_ClientHasItem", Native_HasItem);
     CreateNative("entWatch_EntityIsItem",  Native_IsItem);
 
-#if defined __ZombieEscape__
-    MarkNativeAsOptional("ZE_IsSurvivor");
+    MarkNativeAsOptional("ZE_IsAvenger");
     MarkNativeAsOptional("ZE_IsInfector");
-#endif
-
-#if defined __zombiereloaded__
     MarkNativeAsOptional("ZR_IsClientHuman");
     MarkNativeAsOptional("ZR_IsClientZombie");
-#endif  
 
     return APLRes_Success;
 }
@@ -266,10 +261,10 @@ public void OnConfigsExecuted()
     LoadConfig();
 
 #if defined __ZombieEscape__
-    g_pZombieEscape = LibraryExists("ZombieEscape");
+    g_pZombieEscape = (LibraryExists("ZombieEscape") && GetFeatureStatus(FeatureType_Native, "ZE_IsAvenger") == FeatureStatus_Available);
 #endif
 #if defined __zombiereloaded__
-    g_pZombieReload = LibraryExists("zombiereloaded");
+    g_pZombieReload = (LibraryExists("zombiereloaded") && GetFeatureStatus(FeatureType_Native, "ZR_IsClientZombie") == FeatureStatus_Available);
 #endif
 }
 
