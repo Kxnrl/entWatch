@@ -1114,7 +1114,7 @@ public Action Command_Stats(int client, int args)
     if(!AreClientCookiesCached(client))
     {
 #if defined USE_TRANSLATIONS
-        Chat(client, "%T", client, "ent data not cached");
+        Chat(client, "%T", "ent data not cached", client);
 #else
         Chat(client, "请等待你的数据加载完毕...");
 #endif
@@ -1124,7 +1124,7 @@ public Action Command_Stats(int client, int args)
     if(!g_bBanned[client])
     {
 #if defined USE_TRANSLATIONS
-        Chat(client, "%T", client, "ent not ban");
+        Chat(client, "%T", "ent not ban", client);
 #else
         Chat(client, "你的神器信用等级\x04良好\x01...");
 #endif
@@ -1139,7 +1139,7 @@ public Action Command_Stats(int client, int args)
     FormatTime(buffer_timer, 32, "%Y/%m/%d - %H:%M:%S", exp);
 
 #if defined USE_TRANSLATIONS
-    Chat(client, "%T", client, "ent ban info", buffer_admin, buffer_timer);
+    Chat(client, "%T", "ent ban info", client, buffer_admin, buffer_timer);
 #else
     Chat(client, "你的神器被 \x0C%N\x01 封禁了 [到期时间 \x07%s\x01]", buffer_admin, buffer_timer);
 #endif
@@ -1152,7 +1152,7 @@ public Action Command_DisplayHud(int client, int args)
     if(!AreClientCookiesCached(client))
     {
 #if defined USE_TRANSLATIONS
-        Chat(client, "%T", client, "ent data not cached");
+        Chat(client, "%T", "ent data not cached", client);
 #else
         Chat(client, "请等待你的数据加载完毕...");
 #endif
@@ -1305,10 +1305,10 @@ static void BanClientEnt(int client, int target, int time)
 #if defined USE_TRANSLATIONS
     switch(time)
     {
-        case   0: FormatEx(szTime, 32, "%T", client, "permanent");
-        case   1: FormatEx(szTime, 32, "%T", client, "1 hour");
-        case  24: FormatEx(szTime, 32, "%T", client, "1 day");
-        case 168: FormatEx(szTime, 32, "%T", client, "1 week");
+        case   0: FormatEx(szTime, 32, "%T", "permanent", client);
+        case   1: FormatEx(szTime, 32, "%T", "1 hour",    client);
+        case  24: FormatEx(szTime, 32, "%T", "1 day",     client);
+        case 168: FormatEx(szTime, 32, "%T", "1 week",    client);
     }
 #else
     switch(time)
