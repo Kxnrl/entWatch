@@ -153,6 +153,12 @@
         "chi"       "就绪"
     }
     
+    "Deplete"
+    {
+        "en"        "Deplete"
+        "chi"       "耗尽"
+    }
+    
     "permanent"
     {
         "en"        "permanent"
