@@ -14,6 +14,10 @@
 /*                                                                */
 /******************************************************************/
 
+#undef REQUIRE_EXTENSIONS
+#include <dhooks>
+#define REQUIRE_EXTENSIONS
+
 #pragma semicolon 1
 #pragma newdecls required
 
@@ -52,6 +56,10 @@ public Plugin myinfo =
 #define HUMANS  1
 #define GLOBAL  0
 #define COOLDN  1
+
+#define Pre_Button 0
+#define Pre_Weapon 1
+#define Pre_Locked 2
 
 enum Entity
 {
@@ -99,7 +107,7 @@ any g_EntArray[MAXENT][Entity];
 any g_Forward[Forward];
 any g_Cookies[Cookies];
 
-ArrayList g_aPreHammerId = null;
+ArrayList g_aPreHammerId[3];
 
 Handle g_tRound         = null;
 Handle g_tKnife[MAXPLY] = null;
@@ -123,6 +131,12 @@ float g_fPickup[MAXPLY] = {0.0, ...};
 bool g_pZombieEscape = false;
 bool g_pZombieReload = false;
 
+bool g_bLateload;
+
+// DHook
+static bool g_extDHook;
+static Handle hAcceptInput;
+
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
     RegPluginLibrary("entWatch");
@@ -135,6 +149,8 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max
     MarkNativeAsOptional("ZE_IsInfector");
     MarkNativeAsOptional("ZR_IsClientHuman");
     MarkNativeAsOptional("ZR_IsClientZombie");
+    
+    g_bLateload = late;
 
     return APLRes_Success;
 }
@@ -153,7 +169,7 @@ public int Native_IsItem(Handle plugin, int numParams)
 {
     if(!g_bConfigLoaded)
         return false;
-    
+
     int entity = GetNativeCell(1);
     int entref = EntIndexToEntRef(entity);
 
@@ -199,7 +215,9 @@ public void OnPluginStart()
 
     RegServerCmd("sm_ereload",  Command_Reload);
 
-    g_aPreHammerId = new ArrayList();
+    g_aPreHammerId[Pre_Button] = new ArrayList();
+    g_aPreHammerId[Pre_Weapon] = new ArrayList();
+    g_aPreHammerId[Pre_Locked] = new ArrayList();
 
     g_hHudSyncer[ZOMBIE] = CreateHudSynchronizer();
     g_hHudSyncer[HUMANS] = CreateHudSynchronizer();
@@ -208,7 +226,11 @@ public void OnPluginStart()
     LoadTranslations("entWatch.phrases");
 #endif
 
-    for(int client = 1; client <= MaxClients; ++client)
+    if(g_bLateload)
+    {
+        g_bLateload = false;
+        
+        for(int client = 1; client <= MaxClients; ++client)
         if(ClientIsValid(client))
         {
             OnClientConnected(client);
@@ -216,6 +238,51 @@ public void OnPluginStart()
             if(AreClientCookiesCached(client))
                 OnClientCookiesCached(client);
         }
+        
+        if(LibraryExists("dhooks"))
+            OnLibraryAdded("dhooks");
+    }
+}
+
+public void OnLibraryAdded(const char[] name)
+{
+    if(strcmp(name, "dhooks") == 0)
+    {
+        Handle GameConf = LoadGameConfigFile("sdktools.games\\engine.csgo");
+
+        if(GameConf == null)
+        {
+            SetFailState("Why not has gamedata?");
+            return;
+        }
+
+        int offset = GameConfGetOffset(GameConf, "AcceptInput");
+        hAcceptInput = DHookCreate(offset, HookType_Entity, ReturnType_Bool, ThisPointer_CBaseEntity, Event_AcceptInput);
+        if(hAcceptInput == null)
+        {
+            LogError("Failed to DHook \"AcceptInput\".");
+            return;
+        }
+        
+        delete GameConf;
+
+        DHookAddParam(hAcceptInput, HookParamType_CharPtr);
+        DHookAddParam(hAcceptInput, HookParamType_CBaseEntity);
+        DHookAddParam(hAcceptInput, HookParamType_CBaseEntity);
+        DHookAddParam(hAcceptInput, HookParamType_Object, 20);
+        DHookAddParam(hAcceptInput, HookParamType_Int);
+
+        g_extDHook = true;
+    }
+}
+
+public void OnLibraryRemoved(const char[] name)
+{
+    if(strcmp(name, "dhooks") == 0)
+    {
+        g_extDHook = false;
+        LogError("Dhook library has been removed.");
+    }
 }
 
 public Action Command_Reload(int args)
@@ -233,7 +300,9 @@ public void OnMapStart()
 
 public void OnConfigsExecuted()
 {
-    g_aPreHammerId.Clear();
+    g_aPreHammerId[Pre_Weapon].Clear();
+    g_aPreHammerId[Pre_Button].Clear();
+    g_aPreHammerId[Pre_Locked].Clear();
 
     for(int index = 0; index < MAXENT; index++)
     {
@@ -272,7 +341,17 @@ public void OnMapEnd()
 {
     StopTimer(g_tRound);
     StopTimer(g_tCooldown);
+
 }
+
+//public void OnEntityCreated(int entity, const char[] classname)
+//{
+//    if(g_extDHook && classname[0] == 'l' && strcmp(classname, "logic_compare", false) == 0)
+//    {
+//        PrintToServer("DHookEntity %s [%d]", classname, entity);
+//        DHookEntity(hAcceptInput, true, entity);
+//    }
+//}
 
 public void OnClientConnected(int client)
 {
@@ -400,7 +479,12 @@ static void ResetAllStats()
 public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
 {
     if(!g_bConfigLoaded)
+    {
+        for(int index = 0; index < g_aPreHammerId[Pre_Locked].Length; ++index)
+            g_aPreHammerId[Pre_Locked].Set(index, -1.0);
+        
         return;
+    }
 
     g_szGlobalHud[ZOMBIE][0] = '\0';
     g_szGlobalHud[HUMANS][0] = '\0';
@@ -569,9 +653,9 @@ static void CheckPreConfigs(int client, int weapon)
     if(hammerid <= 0) return;
 
     // if was stored.
-    if(g_aPreHammerId.FindValue(hammerid) != -1)
+    if(g_aPreHammerId[Pre_Weapon].FindValue(hammerid) != -1)
     {
-        ChatAll("\x04entWatch PreConfigs \x01->\x10 Already record \x01[\x07%d\x01]", hammerid);
+        ChatAll("\x04PreConfigs \x01->\x10 Already record \x01[\x07%d\x01]", hammerid);
         return;
     }
 
@@ -579,7 +663,7 @@ static void CheckPreConfigs(int client, int weapon)
     char targetname[128];
     GetEntityTargetName(weapon, targetname, 128);
 
-    ChatAll("\x04entWatch PreConfigs \x01->\x05 targetname\x01[\x07%s\x01]", targetname);
+    ChatAll("\x04PreConfigs \x01->\x05 targetname\x01[\x07%s\x01]", targetname);
 
     if(targetname[0] == '\0')
         return;
@@ -602,9 +686,8 @@ static void CheckPreConfigs(int client, int weapon)
     
     if(!found)
         button = -1;
+    else ChatAll("\x04PreConfigs \x01->\x05 funcbutton\x01[\x07%d\x01]", button);
 
-    ChatAll("\x04entWatch PreConfigs \x01->\x05 funcbutton\x01[\x07%d\x01]", button);
-    
     DataPack pack;
     CreateDataTimer(0.2, Timer_CheckFilter, pack);
     pack.WriteCell(client);
@@ -612,6 +695,39 @@ static void CheckPreConfigs(int client, int weapon)
     pack.WriteCell(button);
     pack.WriteString(targetname);
     pack.WriteString(parentname);
+}
+
+static void SavePreConfigs(int weapon_hammerid, float cooldown)
+{
+    KeyValues kv = new KeyValues("entWatchPre");
+
+    char path[256];
+    GetCurrentMap(path, 256);
+    BuildPath(Path_SM, path, 256, "configs/entWatchPre/%s.cfg", path);
+    
+    if(FileExists(path))
+        kv.ImportFromFile(path);
+
+    kv.Rewind();
+
+    char buffer[32];
+    IntToString(weapon_hammerid, buffer, 32);
+    
+    // check key exists
+    if(!kv.JumpToKey(buffer, false))
+    {
+        delete kv;
+        return;
+    }
+
+    kv.SetNum("cooldown", RoundToFloor(cooldown));
+
+    // Save
+    kv.Rewind();
+    kv.ExportToFile(path);
+    
+    // close
+    delete kv;
 }
 
 public Action Timer_CheckFilter(Handle timer, DataPack pack)
@@ -632,7 +748,7 @@ public Action Timer_CheckFilter(Handle timer, DataPack pack)
     char filtername[128], clientname[128];
     GetEntityTargetName(client, clientname, 128);
 
-    ChatAll("\x04entWatch PreConfigs \x01->\x05 clientname\x01[\x07%s\x01]", clientname);
+    ChatAll("\x04PreConfigs \x01->\x05 clientname\x01[\x07%s\x01]", clientname);
     
     int iFilter = -1;
     bool found = false;
@@ -650,14 +766,14 @@ public Action Timer_CheckFilter(Handle timer, DataPack pack)
     if(!found)
         strcopy(filtername, 128, "null");
 
-    ChatAll("\x04entWatch PreConfigs \x01->\x05 filtername\x01[\x07%s\x01]", filtername);
+    ChatAll("\x04PreConfigs \x01->\x05 filtername\x01[\x07%s\x01]", filtername);
 
     KeyValues kv = new KeyValues("entWatchPre");
 
     char path[256];
     GetCurrentMap(path, 256);
-    Format(path, 256, "addons/sourcemod/configs/entWatchPre/%s.cfg", path);
-    
+    BuildPath(Path_SM, path, 256, "configs/entWatchPre/%s.cfg", path);
+
     if(FileExists(path))
         kv.ImportFromFile(path);
 
@@ -665,9 +781,22 @@ public Action Timer_CheckFilter(Handle timer, DataPack pack)
 
     char kvstringid[16];
     IntToString(hammerid, kvstringid, 16);
+    
+    // store in array
+    g_aPreHammerId[Pre_Weapon].Push(hammerid);
+    g_aPreHammerId[Pre_Button].Push(button == -1 ? -1 : GetEntityHammerID(button));
+    g_aPreHammerId[Pre_Locked].Push(-1.0);
 
     if(kv.JumpToKey(kvstringid, false))
+    {
+        int cooldown = kv.GetNum("cooldown");
+        if(cooldown > 0)
+        {
+            g_aPreHammerId[Pre_Button].Set(g_aPreHammerId[Pre_Button].Length-1, -1);
+            g_aPreHammerId[Pre_Locked].Set(g_aPreHammerId[Pre_Locked].Length-1, cooldown);
+        }
         return Plugin_Stop;
+    }
 
     // create key
     kv.JumpToKey(kvstringid, true);
@@ -702,10 +831,13 @@ public Action Timer_CheckFilter(Handle timer, DataPack pack)
     // close
     delete kv;
 
-    // store in array
-    g_aPreHammerId.Push(hammerid);
-    
-    ChatAll("\x04entWatch PreConfigs \x01->\x10 Record the data successfully", filtername);
+    if(button != -1 && g_extDHook)
+    {
+        PrintToServer("DHookEntity func_button [%d]", button);
+        DHookEntity(hAcceptInput, true, button);
+    }
+
+    ChatAll("\x04PreConfigs \x01->\x10 Record the data successfully", filtername);
 
     return Plugin_Stop;
 }
@@ -955,6 +1087,81 @@ public Action Event_ButtonUse(int button, int activator, int caller, UseType typ
     }
 
     return Plugin_Handled;
+}
+
+public MRESReturn Event_AcceptInput(int pThis, Handle hReturn, Handle hParams)
+{
+    if(!IsValidEntity(pThis))
+        return MRES_Ignored;
+    
+    char classname[32];
+    GetEntityClassname(pThis, classname, 32);
+
+    char command[128];
+    DHookGetParamString(hParams, 1, command, 128);
+    PrintToServer("Event_AcceptInput pThis -> %d.%s -> %s", pThis, classname, command);
+    
+    // Tested on ze_sandstorm_go_v1_3
+    if(strcmp(classname, "func_button") == 0)
+    {
+        if(strcmp(command, "Lock", false) == 0)
+        {
+            int index = g_aPreHammerId[Pre_Button].FindValue(GetEntityHammerID(pThis));
+            if(index > -1)
+                g_aPreHammerId[Pre_Locked].Set(index, GetGameTime());
+        }
+        else if(strcmp(command, "Unlock", false) == 0)
+        {
+            int index = g_aPreHammerId[Pre_Button].FindValue(GetEntityHammerID(pThis));
+            if(index > -1)
+            {
+                float locked = g_aPreHammerId[Pre_Locked].Get(index);
+                if(locked > 0.0)
+                {
+                    float cooldown = GetGameTime() - locked;
+                    SavePreConfigs(g_aPreHammerId[Pre_Weapon].Get(index), cooldown);
+                    g_aPreHammerId[Pre_Button].Set(index, -1);
+                }
+            }
+        }
+    }
+    // Tested on ze_FFVII_Mako_Reactor_v5_3_v5 ? bug
+    //else if(strcmp(classname, "logic_compare") == 0)
+    //{
+    //    int type = -1;
+    //    float fVal = 0.0;
+    //    type = DHookGetParamObjectPtrVar(hParams, 4, 16, ObjectValueType_Int);
+    //
+    //    if(type == 1) 
+    //        fVal = DHookGetParamObjectPtrVar(hParams, 4, 0, ObjectValueType_Float);
+    //    else if(type == 2)
+    //    {
+    //        char val[32];
+    //        DHookGetParamObjectPtrString(hParams, 4, 0, ObjectValueType_String, val, 128);
+    //        StringToFloatEx(val, fVal);
+    //    }
+    //
+    //    if(strcmp(command, "SetCompareValue", false) == 0)
+    //    {
+    //        int index = g_aPreHammerId[Pre_Button].FindValue(GetEntityHammerID(pThis));
+    //        if(index > -1)
+    //        {
+    //            float locked = g_aPreHammerId[Pre_Locked].Get(index);
+    //            if(locked == -1.0)
+    //            {
+    //                g_aPreHammerId[Pre_Locked].Set(index, GetGameTime());
+    //            }
+    //            else
+    //            {
+    //                float cooldown = GetGameTime() - locked;
+    //                SavePreConfigs(g_aPreHammerId[Pre_Weapon].Get(index), cooldown);
+    //                g_aPreHammerId[Pre_Button].Set(index, -1);
+    //            }
+    //        }
+    //    }
+    //}
+
+    return MRES_Ignored;
 }
 
 public Action Timer_Cooldowns(Handle timer)
