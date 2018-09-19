@@ -14,9 +14,6 @@
 /*                                                                */
 /******************************************************************/
 
-#undef REQUIRE_EXTENSIONS
-#include <dhooks>
-#define REQUIRE_EXTENSIONS
 
 #pragma semicolon 1
 #pragma newdecls required
@@ -26,6 +23,10 @@
 #include <sdkhooks>
 #include <clientprefs>
 #include <entWatch>
+
+#undef REQUIRE_EXTENSIONS
+#include <dhooks>
+#define REQUIRE_EXTENSIONS
 
 #undef REQUIRE_PLUGIN
 #include <ZombieEscape>
@@ -37,7 +38,7 @@
 #define PI_NAME "[CSGO] entWatch"
 #define PI_AUTH "Kyle"
 #define PI_DESC "Notify players about entity interactions."
-#define PI_VERS "1.1.0"
+#define PI_VERS "1.1.2"
 #define PI_URLS "https://kxnrl.com"
 
 public Plugin myinfo = 
@@ -103,35 +104,35 @@ enum Cookies
     Handle:DisplayHud
 }
 
-any g_EntArray[MAXENT][Entity];
-any g_Forward[Forward];
-any g_Cookies[Cookies];
+static any g_EntArray[MAXENT][Entity];
+static any g_Forward[Forward];
+static any g_Cookies[Cookies];
 
-ArrayList g_aPreHammerId[3];
+static ArrayList g_aPreHammerId[3];
 
-Handle g_tRound         = null;
-Handle g_tKnife[MAXPLY] = null;
-Handle g_tCooldown      = null;
-Handle g_hHudSyncer[2]  = null;
+static Handle g_tRound         = null;
+static Handle g_tKnife[MAXPLY] = null;
+static Handle g_tCooldown      = null;
+static Handle g_hHudSyncer     = null;
 
-int  g_iEntCounts      = MAXENT;
-int  g_iScores[MAXPLY] = {0, ...};
-int  g_iIconRef[MAXPLY] = {INVALID_ENT_REFERENCE, ...};
+static int  g_iEntCounts      = MAXENT;
+static int  g_iScores[MAXPLY] = {0, ...};
+static int  g_iIconRef[MAXPLY] = {INVALID_ENT_REFERENCE, ...};
 
-bool g_bConfigLoaded    = false;
-bool g_bHasEnt[MAXPLY]  = false;
-bool g_bBanned[MAXPLY]  = false;
-bool g_bEntHud[MAXPLY]  = false;
+static bool g_bConfigLoaded    = false;
+static bool g_bHasEnt[MAXPLY]  = false;
+static bool g_bBanned[MAXPLY]  = false;
+static bool g_bEntHud[MAXPLY]  = false;
 
-char g_szGlobalHud[2][2048];
-char g_szClantag[MAXPLY][32];
+static char g_szGlobalHud[2][2048];
+static char g_szClantag[MAXPLY][32];
 
-float g_fPickup[MAXPLY] = {0.0, ...};
+static float g_fPickup[MAXPLY] = {0.0, ...};
 
-bool g_pZombieEscape = false;
-bool g_pZombieReload = false;
+static bool g_pZombieEscape = false;
+static bool g_pZombieReload = false;
 
-bool g_bLateload;
+static bool g_bLateload;
 
 // DHook
 static bool g_extDHook;
@@ -185,7 +186,8 @@ public void OnPluginStart()
     if(GetEngineVersion() != Engine_CSGO)
         SetFailState("CSGO only!");
 
-    SMUtils_SetChatPrefix("[\x05entWatch\x01]");
+    SMUtils_SetChatPrefix("[\x04entWatch\x01]");
+    SMUtils_SetChatSpaces("   ");
     SMUtils_SetChatConSnd(true);
     SMUtils_SetTextDest(HUD_PRINTCENTER);
 
@@ -219,9 +221,8 @@ public void OnPluginStart()
     g_aPreHammerId[Pre_Weapon] = new ArrayList();
     g_aPreHammerId[Pre_Locked] = new ArrayList();
 
-    g_hHudSyncer[ZOMBIE] = CreateHudSynchronizer();
-    g_hHudSyncer[HUMANS] = CreateHudSynchronizer();
-    
+    g_hHudSyncer = CreateHudSynchronizer();
+
 #if defined USE_TRANSLATIONS
     LoadTranslations("entWatch.phrases");
 #endif
@@ -505,7 +506,7 @@ public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
 
 public Action Timer_RoundStart(Handle timer)
 {
-    g_tRound = INVALID_HANDLE;
+    g_tRound = null;
 
 #if defined USE_TRANSLATIONS
     tChatAll("%t", "welcome message");
@@ -740,7 +741,7 @@ public Action Timer_CheckFilter(Handle timer, DataPack pack)
     pack.ReadString(targetname, 128);
     pack.ReadString(parentname, 128);
 
-    if(!IsClientInGame(client) || !IsPlayerAlive(client))
+    if(!IsClientInGame(client) || !IsPlayerAlive(client) || !IsValidEdict(client))
         return Plugin_Stop;
     
     int hammerid = GetEntityHammerID(weapon);
@@ -894,7 +895,8 @@ public void Event_WeaponDropPost(int client, int weapon)
     if(GetEntPropEnt(weapon, Prop_Data, "m_hMoveChild") != -1)
         return;
 
-    AcceptEntityInput(weapon, "Kill");
+    //AcceptEntityInput(weapon, "KillHierarchy");
+    if(!SelfKillEntityEx(weapon, 15.0)) AcceptEntityInput(weapon, "KillHierarchy");
 }
 
 static void SetClientDefault(int client)
@@ -905,8 +907,6 @@ static void SetClientDefault(int client)
 
     CS_SetClientContributionScore(client, CS_GetClientContributionScore(client) - g_iScores[client]);
     CS_SetClientClanTag(client, g_szClantag[client]);
-    
-    ClearSyncHud(client, g_hHudSyncer[COOLDN]);
 }
 
 static bool IsWeaponKnife(int weapon)
@@ -1202,31 +1202,31 @@ static void RefreshHud()
 
     for(int client = 1; client <= MaxClients; ++client)
         if(IsClientInGame(client) && !g_bEntHud[client])
-            if(GetClientTeam(client) == 2)
-                ShowSyncHudText(client, g_hHudSyncer[GLOBAL], g_szGlobalHud[ZOMBIE]);
-            else
-                ShowSyncHudText(client, g_hHudSyncer[GLOBAL], g_szGlobalHud[HUMANS]);
+            ShowSyncHudText(client, g_hHudSyncer, (IsInfector(client)) ? g_szGlobalHud[ZOMBIE] : g_szGlobalHud[HUMANS]);
 }
 
-void CountdownMessage(int index)
+static void CountdownMessage(int index)
 {
     if(g_EntArray[index][ent_mode] == 4 || g_EntArray[index][ent_mode] == 2 || g_EntArray[index][ent_mode] == 5)
     {
         if(ClientIsAlive(g_EntArray[index][ent_ownerid]))
         {
-            if(g_EntArray[index][ent_cooldowntime] > 0)
+            if(g_bEntHud[g_EntArray[index][ent_ownerid]])
             {
-                SetHudTextParams(-1.0, 0.05, 2.0, 205, 173, 0, 255, 0, 30.0, 0.0, 0.0);
-                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer[COOLDN], ">>> [%s] :  %ds <<< ", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime]);
-            }
-            else
-            {
-                SetHudTextParams(-1.0, 0.05, 2.0, 0, 255, 0, 255, 0, 30.0, 0.0, 0.0);
+                if(g_EntArray[index][ent_cooldowntime] > 0)
+                {
+                    SetHudTextParams(-1.0, 0.05, 2.0, 205, 173, 0, 255, 0, 30.0, 0.0, 0.0);
+                    ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer, ">>> [%s] :  %ds <<< ", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime]);
+                }
+                else
+                {
+                    SetHudTextParams(-1.0, 0.05, 2.0, 0, 255, 0, 255, 0, 30.0, 0.0, 0.0);
 #if defined USE_TRANSLATIONS
-                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer[COOLDN], "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Ready");
+                    ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer, "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Ready");
 #else
-                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer[COOLDN], "神器[%s]就绪", g_EntArray[index][ent_name]);
+                    ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer, "神器[%s]就绪", g_EntArray[index][ent_name]);
 #endif
+                }
             }
         }
         else if(g_EntArray[index][ent_cooldowntime] == 1)
@@ -1243,26 +1243,32 @@ void CountdownMessage(int index)
     {
         if(g_EntArray[index][ent_mode] == 3 && g_EntArray[index][ent_uses] >= g_EntArray[index][ent_maxuses])
         {
-            SetHudTextParams(-1.0, 0.05, 2.0, 255, 0, 0, 233, 0, 30.0, 0.0, 0.0);
+            if(g_bEntHud[g_EntArray[index][ent_ownerid]])
+            {
+                SetHudTextParams(-1.0, 0.05, 2.0, 255, 0, 0, 233, 0, 30.0, 0.0, 0.0);
 #if defined USE_TRANSLATIONS
-            ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer[COOLDN], "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Deplete");
+                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer, "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Deplete");
 #else
-            ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer[COOLDN], "神器[%s]耗尽", g_EntArray[index][ent_name]);
+                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer, "神器[%s]耗尽", g_EntArray[index][ent_name]);
 #endif
+            }
         }
         else
         {
-            SetHudTextParams(-1.0, 0.05, 2.0, 0, 255, 0, 255, 0, 30.0, 0.0, 0.0);
+            if(g_bEntHud[g_EntArray[index][ent_ownerid]])
+            {
+                SetHudTextParams(-1.0, 0.05, 2.0, 0, 255, 0, 255, 0, 30.0, 0.0, 0.0);
 #if defined USE_TRANSLATIONS
-                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer[COOLDN], "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Ready");
+                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer, "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Ready");
 #else
-                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer[COOLDN], "神器[%s]就绪", g_EntArray[index][ent_name]);
+                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer, "神器[%s]就绪", g_EntArray[index][ent_name]);
 #endif
+            }
         }
     }
 }
 
-void BuildHUDandScoreboard(int index)
+static void BuildHUDandScoreboard(int index)
 {
     if(!g_EntArray[index][ent_displayhud])
         return;
@@ -1421,7 +1427,7 @@ public int MenuHandler_Ban(Menu menu, MenuAction action, int client, int itemNum
         delete menu;
 }
 
-void BuildBanLengthMenu(int client, const char[] target)
+static void BuildBanLengthMenu(int client, const char[] target)
 {
     Menu menu = new Menu(MenuHandler_Time);
     
@@ -1591,7 +1597,7 @@ public int MenuHandler_Unban(Menu menu, MenuAction action, int client, int itemN
         delete menu;
 }
 
-void UnestrictClientEnt(int client, int target)
+static void UnestrictClientEnt(int client, int target)
 {
     if(!IsClientInGame(client))
         return;
@@ -1974,7 +1980,7 @@ static void RemoveWeaponGlow(int index)
         int entity = EntRefToEntIndex(g_EntArray[index][ent_glowref]);
 
         if(IsValidEdict(entity))
-            AcceptEntityInput(entity, "Kill");
+            AcceptEntityInput(entity, "KillHierarchy");
 
         g_EntArray[index][ent_glowref] = INVALID_ENT_REFERENCE;
     }
@@ -2031,7 +2037,7 @@ static void ClearIcon(int client)
     {
         int iEnt = EntRefToEntIndex(g_iIconRef[client]);
         if(IsValidEdict(iEnt))
-            AcceptEntityInput(iEnt, "Kill");
+            AcceptEntityInput(iEnt, "KillHierarchy");
     }
 
     g_iIconRef[client] = INVALID_ENT_REFERENCE;
