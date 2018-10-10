@@ -2045,6 +2045,9 @@ static void ClearIcon(int client)
 
 static bool IsInfector(int client)
 {
+    if(!IsPlayerAlive(client))
+        return true;
+
     if(g_pZombieEscape)
         return (ZE_IsInfector(client) || ZE_IsAvenger(client));
 
