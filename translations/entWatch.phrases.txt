@@ -130,14 +130,14 @@
 	"transfer ent"
 	{
 		"#format"	"{1:N},{2:N},{3:s}"
-		"en"		"{green}{1}{normal}: capture {red}{2}{normal}`s {green}{3}{normal}.}"
+		"en"		"{green}{1}{normal} captured {green}{3}{normal} from {red}{2}{normal}."
 		"chi"		"{blue}{1}{normal}拿走了{blue}{2}{normal}手上的神器{green}{3}"
 		"zho"		"{blue}{1}{normal}搶去了{blue}{2}{normal}手上的神器{green}{3}"
 	}
     
     "welcome message"
     {
-        "en"		"{red}This server are using entWatch! {silver}::{green}Kyle Present{silver}::"
+        "en"		"{red}This server is using entWatch! {silver}::{green}Kyle Present{silver}::"
 		"chi"		"{red}当前服务器已启动entWatch! {silver}::{green}Kyle Present{silver}::"
     }
     
