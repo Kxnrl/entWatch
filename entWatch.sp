@@ -38,7 +38,7 @@
 #define PI_NAME "[CSGO] entWatch"
 #define PI_AUTH "Kyle"
 #define PI_DESC "Notify players about entity interactions."
-#define PI_VERS "1.1.2"
+#define PI_VERS "1.2.0"
 #define PI_URLS "https://kxnrl.com"
 
 public Plugin myinfo = 
@@ -51,12 +51,12 @@ public Plugin myinfo =
 };
 
 
-#define MAXENT 64
-#define MAXPLY 65
-#define ZOMBIE  0
-#define HUMANS  1
-#define GLOBAL  0
-#define COOLDN  1
+#define MAXENT 128
+#define MAXPLY  65
+#define ZOMBIE   0
+#define HUMANS   1
+#define GLOBAL   0
+#define COOLDN   1
 
 #define Pre_Button 0
 #define Pre_Weapon 1
@@ -77,12 +77,14 @@ enum Entity
     ent_mode,               // 0 = No button, 1 = Spam protection only, 2 = Cooldowns, 3 = Limited uses, 4 = Limited uses with cooldowns, 5 = Cooldowns after multiple uses.
     ent_uses,
     ent_maxuses,
+    ent_startcd,
     ent_cooldown,
     ent_cooldowntime,
     ent_team,               //  2 = Zombies , 3 = Humans
     bool:ent_displayhud,
     bool:ent_weaponglow,
     bool:ent_pickedup,
+    bool:ent_ismulti,
 }
 
 enum Forward
@@ -113,7 +115,6 @@ static ArrayList g_aPreHammerId[3];
 static Handle g_tRound         = null;
 static Handle g_tKnife[MAXPLY] = null;
 static Handle g_tCooldown      = null;
-static Handle g_hHudSyncer     = null;
 
 static int  g_iEntCounts      = MAXENT;
 static int  g_iScores[MAXPLY] = {0, ...};
@@ -221,8 +222,6 @@ public void OnPluginStart()
     g_aPreHammerId[Pre_Weapon] = new ArrayList();
     g_aPreHammerId[Pre_Locked] = new ArrayList();
 
-    g_hHudSyncer = CreateHudSynchronizer();
-
 #if defined USE_TRANSLATIONS
     LoadTranslations("entWatch.phrases");
 #endif
@@ -323,7 +322,7 @@ public void OnConfigsExecuted()
         g_EntArray[index][ent_cooldowntime]   = -1;
         g_EntArray[index][ent_weaponglow]     = false;
         g_EntArray[index][ent_displayhud]     = false;
-        g_EntArray[index][ent_displayhud]     = false;
+        g_EntArray[index][ent_ismulti]        = false;
         g_EntArray[index][ent_team]           = -1;
         g_EntArray[index][ent_glowref]   = INVALID_ENT_REFERENCE;
     }
@@ -494,6 +493,12 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
     if(g_tRound != null)
         KillTimer(g_tRound);
     g_tRound = CreateTimer(5.0, Timer_RoundStart);
+    
+    static ConVar mp_disconnect_kills_players = null;
+    if(mp_disconnect_kills_players == null)
+        mp_disconnect_kills_players = FindConVar("mp_disconnect_kills_players");
+
+    mp_disconnect_kills_players.SetInt(0, true, true);
 }
 
 public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
@@ -513,34 +518,6 @@ public Action Timer_RoundStart(Handle timer)
 #else
     ChatAll("\x07当前服务器已启动entWatch \x0A::\x04Kyle Present\x0A::");
 #endif
-
-    char classname[32];
-    int hammerid;
-    for(int entity = MaxClients+1; entity <= 2048; ++entity)
-    {
-        if(!IsValidEdict(entity))
-            continue;
-
-        if(!GetEdictClassname(entity, classname, 32))
-            continue;
-
-        if(StrContains(classname, "weapon_", false) != 0)
-            continue;
-        
-        hammerid = GetEntityHammerID(entity);
-        
-        if(hammerid <= 0)
-            continue;
-
-        int index = FindIndexByHammerId(hammerid);
-
-        if(index < 0)
-            continue;
-
-        g_EntArray[index][ent_weaponref] = EntIndexToEntRef(entity);
-
-        RequestFrame(SetWeaponGlow, index);
-    }
 
     return Plugin_Stop;
 }
@@ -586,6 +563,49 @@ public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast
     SetClientDefault(client);
 }
 
+public void OnEntityCreated(int entity, const char[] classname)
+{
+    if(classname[6] != '_' || StrContains(classname, "weapon_", false) != 0)
+        return;
+    
+    SDKHook(entity, SDKHook_SpawnPost, Event_WeaponCreated);
+}
+
+public void Event_WeaponCreated(int entity)
+{
+    SDKUnhook(entity, SDKHook_SpawnPost, Event_WeaponCreated);
+
+    if(!IsValidEdict(entity))
+        return;
+
+    char classname[32];
+
+    if(!GetEdictClassname(entity, classname, 32))
+        return;
+
+    if(StrContains(classname, "weapon_", false) != 0)
+        return;
+
+    int hammerid = GetEntityHammerID(entity);
+
+    if(hammerid <= 0)
+        return;
+
+    int index = FindIndexByHammerId(hammerid);
+
+    if(index < 0)
+        return;
+
+    while(IsValidEdict(EntRefToEntIndex(g_EntArray[index][ent_weaponref]))) index++;
+    
+    if(g_EntArray[index][ent_hammerid] != hammerid)
+        return;
+
+    g_EntArray[index][ent_weaponref] = EntIndexToEntRef(entity);
+
+    RequestFrame(SetWeaponGlow, index);
+}
+
 public void Event_WeaponEquipPost(int client, int weapon)
 {
     if(!g_bConfigLoaded)
@@ -594,14 +614,28 @@ public void Event_WeaponEquipPost(int client, int weapon)
         return;
     }
 
-    int index = FindIndexByHammerId(GetEntityHammerID(weapon));
+    int hamid = GetEntityHammerID(weapon);
+    
+    if(hamid <= 0)
+        return;
+
+    int index = FindIndexByHammerId(hamid);
     
     if(index < 0)
         return;
 
-    g_EntArray[index][ent_weaponref] = EntIndexToEntRef(weapon);
-    g_EntArray[index][ent_ownerid]   = client;
-    g_EntArray[index][ent_pickedup]  = true;
+    while(ClientIsAlive(g_EntArray[index][ent_ownerid])) index++;
+
+    if(g_EntArray[index][ent_hammerid] != hamid)
+    {
+        LogError("g_EntArray[][ent_hammerid] is out-of-bouns. -> hammerid = %d", hamid);
+        return;
+    }
+
+    g_EntArray[index][ent_cooldowntime] = g_EntArray[index][ent_pickedup] ? -1 : g_EntArray[index][ent_startcd];
+    g_EntArray[index][ent_weaponref]    = EntIndexToEntRef(weapon);
+    g_EntArray[index][ent_ownerid]      = client;
+    g_EntArray[index][ent_pickedup]     = true;
 
     CreateIcon(client);
     RemoveWeaponGlow(index);
@@ -628,6 +662,7 @@ public void Event_WeaponEquipPost(int client, int weapon)
             {
                 SDKHookEx(button, SDKHook_Use, Event_ButtonUse);
                 g_EntArray[index][ent_buttonid] = button;
+                //LogMessage("%N first picked %d:%d", client, weapon, button);
                 break;
             }
         }
@@ -854,6 +889,8 @@ public void Event_WeaponDropPost(int client, int weapon)
 
         if(index >= 0)
         {
+            index = FindRealIndexByOnwer(index, client);
+
             int weaponindex = EntRefToEntIndex(g_EntArray[index][ent_weaponref]);
 
             if(weaponindex == weapon)
@@ -895,8 +932,8 @@ public void Event_WeaponDropPost(int client, int weapon)
     if(GetEntPropEnt(weapon, Prop_Data, "m_hMoveChild") != -1)
         return;
 
-    //AcceptEntityInput(weapon, "KillHierarchy");
-    if(!SelfKillEntityEx(weapon, 15.0)) AcceptEntityInput(weapon, "KillHierarchy");
+    AcceptEntityInput(weapon, "KillHierarchy");
+    //if(!SelfKillEntityEx(weapon, 15.0)) AcceptEntityInput(weapon, "KillHierarchy");
 }
 
 static void SetClientDefault(int client)
@@ -939,14 +976,17 @@ public Action Event_WeaponCanUse(int client, int weapon)
         return Plugin_Continue;
 
     if(g_EntArray[index][ent_team] != GetClientTeam(client))
+    {
+        //CheckClientKnife(client);
         return Plugin_Handled;
+    }
 
     if(!CanClientUseEnt(client))
     {
         CheckClientKnife(client);
         return Plugin_Handled;
     }
-    
+
     bool allow = true;
     Call_StartForward(g_Forward[OnPick]);
     Call_PushCell(client);
@@ -973,27 +1013,48 @@ static bool CanClientUseEnt(int client)
 
 public Action Event_ButtonUse(int button, int activator, int caller, UseType type, float value)
 {
-    if(!g_bConfigLoaded || !IsValidEdict(button) || !ClientIsValid(activator))
+    if(!g_bConfigLoaded || !IsValidEdict(button) || !ClientIsAlive(activator))
         return Plugin_Continue;
-
-    int iOffset = FindDataMapInfo(button, "m_bLocked");
-
-    if(iOffset != -1 && GetEntData(button, iOffset, 1))
-        return Plugin_Handled;
+    
+    //LogMessage("%N pressing %d : %d", activator, button, GetEntityHammerID(button));
+    //LogMessage("%d parent is %d", button, GetEntPropEnt(button, Prop_Data, "m_pParent"));
 
     int index = FindIndexByButton(button);
 
     if(index < 0)
+    {
+        //LogMessage("Event_ButtonUse -> %N -> FindIndexByButton -> %d : %d", activator, button, GetEntityHammerID(button));
         return Plugin_Handled;
+    }
 
     if(g_EntArray[index][ent_ownerid] != activator)
+    {
+        //LogMessage("Event_ButtonUse -> %N -> activator", activator);
         return Plugin_Handled;
+    }
 
     if(g_fPickup[activator]+1.5 > GetGameTime())
+    {
+        //LogMessage("Event_ButtonUse -> %N -> g_fPickup", activator);
         return Plugin_Handled;
+    }
     
+    if(!g_EntArray[index][ent_ismulti])
+    {
+        int iOffset = FindDataMapInfo(button, "m_bLocked");
+
+        if(iOffset != -1 && GetEntData(button, iOffset, 1))
+        {
+            //LogMessage("Event_ButtonUse -> %N -> iOffset", activator);
+            return Plugin_Handled;
+        }
+    }
+
     if(g_EntArray[index][ent_team] != GetClientTeam(activator))
+    {
+        //LogMessage("Event_ButtonUse -> %N -> GetClientTeam");
         return Plugin_Handled;
+    }
 
     if(g_EntArray[index][ent_hasfiltername])
         DispatchKeyValue(activator, "targetname", g_EntArray[index][ent_filtername]);
@@ -1024,7 +1085,7 @@ public Action Event_ButtonUse(int button, int activator, int caller, UseType typ
 
         RefreshHud();
         AddClientScore(activator, 3);
-        
+
         return Plugin_Continue;
     }
     else if(g_EntArray[index][ent_mode] == 3 && g_EntArray[index][ent_uses] < g_EntArray[index][ent_maxuses], activator, g_EntArray[index][ent_name], g_EntArray[index][ent_maxuses]-g_EntArray[index][ent_uses])
@@ -1193,16 +1254,18 @@ static void RefreshHud()
     }
 
     if(strcmp(g_szGlobalHud[ZOMBIE], "[!ehud] Zombie entWatch: ") == 0)
-        Format(g_szGlobalHud[ZOMBIE], 2048, "%s\n", g_szGlobalHud[ZOMBIE]);
+        g_szGlobalHud[ZOMBIE][0] = '\0';
+        //Format(g_szGlobalHud[ZOMBIE], 2048, "%s\n", g_szGlobalHud[ZOMBIE]);
 
     if(strcmp(g_szGlobalHud[HUMANS], "[!ehud] Humans entWatch: ") == 0)
-        Format(g_szGlobalHud[HUMANS], 2048, "%s\n", g_szGlobalHud[HUMANS]);
+        g_szGlobalHud[HUMANS][0] = '\0';
+        //Format(g_szGlobalHud[HUMANS], 2048, "%s\n", g_szGlobalHud[HUMANS]);
 
     SetHudTextParams(0.160500, 0.099000, 2.0, 57, 197, 187, 255, 0, 30.0, 0.0, 0.0);
 
     for(int client = 1; client <= MaxClients; ++client)
         if(IsClientInGame(client) && !g_bEntHud[client])
-            ShowSyncHudText(client, g_hHudSyncer, (IsInfector(client)) ? g_szGlobalHud[ZOMBIE] : g_szGlobalHud[HUMANS]);
+            ShowHudText(client, 5, IsInfector(client) ? g_szGlobalHud[ZOMBIE] : g_szGlobalHud[HUMANS]);
 }
 
 static void CountdownMessage(int index)
@@ -1216,15 +1279,15 @@ static void CountdownMessage(int index)
                 if(g_EntArray[index][ent_cooldowntime] > 0)
                 {
                     SetHudTextParams(-1.0, 0.05, 2.0, 205, 173, 0, 255, 0, 30.0, 0.0, 0.0);
-                    ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer, ">>> [%s] :  %ds <<< ", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime]);
+                    ShowHudText(g_EntArray[index][ent_ownerid], 6, ">>> [%s] :  %ds <<< ", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime]);
                 }
                 else
                 {
                     SetHudTextParams(-1.0, 0.05, 2.0, 0, 255, 0, 255, 0, 30.0, 0.0, 0.0);
 #if defined USE_TRANSLATIONS
-                    ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer, "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Ready");
+                    ShowHudText(g_EntArray[index][ent_ownerid], 6, "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Ready");
 #else
-                    ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer, "神器[%s]就绪", g_EntArray[index][ent_name]);
+                    ShowHudText(g_EntArray[index][ent_ownerid], 6, "神器[%s]就绪", g_EntArray[index][ent_name]);
 #endif
                 }
             }
@@ -1247,9 +1310,9 @@ static void CountdownMessage(int index)
             {
                 SetHudTextParams(-1.0, 0.05, 2.0, 255, 0, 0, 233, 0, 30.0, 0.0, 0.0);
 #if defined USE_TRANSLATIONS
-                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer, "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Deplete");
+                ShowHudText(g_EntArray[index][ent_ownerid], 6, "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Deplete");
 #else
-                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer, "神器[%s]耗尽", g_EntArray[index][ent_name]);
+                ShowHudText(g_EntArray[index][ent_ownerid], 6, "神器[%s]耗尽", g_EntArray[index][ent_name]);
 #endif
             }
         }
@@ -1259,9 +1322,9 @@ static void CountdownMessage(int index)
             {
                 SetHudTextParams(-1.0, 0.05, 2.0, 0, 255, 0, 255, 0, 30.0, 0.0, 0.0);
 #if defined USE_TRANSLATIONS
-                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer, "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Ready");
+                ShowHudText(g_EntArray[index][ent_ownerid], 6, "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Ready");
 #else
-                ShowSyncHudText(g_EntArray[index][ent_ownerid], g_hHudSyncer, "神器[%s]就绪", g_EntArray[index][ent_name]);
+                ShowHudText(g_EntArray[index][ent_ownerid], 6, "神器[%s]就绪", g_EntArray[index][ent_name]);
 #endif
             }
         }
@@ -1729,6 +1792,8 @@ static void TransferClientEnt(int client, int target)
 
 static void LoadConfig()
 {
+    StopTimer(g_tCooldown);
+    
     g_iEntCounts = 0;
     g_bConfigLoaded = false;
 
@@ -1742,90 +1807,104 @@ static void LoadConfig()
         return;
     }
 
-    char temp[32];
-    int buffer_amount;
-
     KeyValues kv = new KeyValues("entities");
 
     kv.ImportFromFile(path);
     kv.Rewind();
-
-    if(kv.GotoFirstSubKey())
-    {
-        g_bConfigLoaded = true;
-
-        do
-        {
-            kv.GetString("maxamount", temp, 32);
-            buffer_amount = StringToInt(temp);
-
-            if(buffer_amount == 0)
-                buffer_amount = 1;
-
-            for(int i = 0; i < buffer_amount; i++)
-            {
-                kv.GetString("name", temp, 32);
-                strcopy(g_EntArray[g_iEntCounts][ent_name], 32, temp);
-
-                kv.GetString("shortname", temp, 32);
-                strcopy(g_EntArray[g_iEntCounts][ent_short], 32, temp);
-                
-                kv.GetString("buttonclass", temp, 32);
-                strcopy(g_EntArray[g_iEntCounts][ent_buttonclass], 32, temp);
-
-                kv.GetString("filtername", temp, 32);
-                strcopy(g_EntArray[g_iEntCounts][ent_filtername], 32, temp);
-                
-                kv.GetString("hasfiltername", temp, 32);
-                g_EntArray[g_iEntCounts][ent_hasfiltername] = (strcmp(temp, "true", false) == 0);
-                
-                kv.GetString("hammerid", temp, 32);
-                g_EntArray[g_iEntCounts][ent_hammerid] = StringToInt(temp);
-
-                kv.GetString("mode", temp, 32);
-                g_EntArray[g_iEntCounts][ent_mode] = StringToInt(temp);
-
-                kv.GetString("maxuses", temp, 32);
-                g_EntArray[g_iEntCounts][ent_maxuses] = StringToInt(temp);
-
-                kv.GetString("cooldown", temp, 32);
-                g_EntArray[g_iEntCounts][ent_cooldown] = StringToInt(temp);
-
-                kv.GetString("glow", temp, 32);
-                g_EntArray[g_iEntCounts][ent_weaponglow] = (strcmp(temp, "true", false) == 0);
-
-                kv.GetString("hud", temp, 32);
-                g_EntArray[g_iEntCounts][ent_displayhud] = (strcmp(temp, "true", false) == 0);
-
-                kv.GetString("team", temp, 32);
-                if(strcmp(temp, "human", false) == 0)
-                    g_EntArray[g_iEntCounts][ent_team] = 3;
-                else
-                    g_EntArray[g_iEntCounts][ent_team] = 2;
-
-                g_iEntCounts++;
-            }
-        }
-        while(kv.GotoNextKey());
-        
-        if(g_iEntCounts)
-            LogMessage("Load %s successful", path);
-        else
-            LogError("Loaded %s but not found any data", path);
-    }
+    
+    ImportKeyValies(kv);
 
     delete kv;
 
-    if(g_tCooldown != null)
-        KillTimer(g_tCooldown);
-    g_tCooldown = CreateTimer(1.0, Timer_Cooldowns, _, TIMER_REPEAT);
+    if(g_iEntCounts)
+    {
+        g_bConfigLoaded = true;
+        LogMessage("Load %s successful", path);
+        g_tCooldown = CreateTimer(1.0, Timer_Cooldowns, _, TIMER_REPEAT);
+    }
+    else
+        LogError("Loaded %s but not found any data", path);
+}
+
+static void ImportKeyValies(KeyValues kv)
+{
+    if(!kv.GotoFirstSubKey())
+        return;
+    
+    char temp[32];
+    int buffer_amount;
+
+    do
+    {
+        kv.GetString("maxamount", temp, 32);
+        buffer_amount = StringToInt(temp);
+
+        if(buffer_amount == 0)
+            buffer_amount = 1;
+
+        for(int i = 0; i < buffer_amount; i++)
+        {
+            kv.GetString("name", temp, 32);
+            strcopy(g_EntArray[g_iEntCounts][ent_name], 32, temp);
+
+            kv.GetString("shortname", temp, 32);
+            strcopy(g_EntArray[g_iEntCounts][ent_short], 32, temp);
+            
+            kv.GetString("buttonclass", temp, 32);
+            strcopy(g_EntArray[g_iEntCounts][ent_buttonclass], 32, temp);
+
+            kv.GetString("filtername", temp, 32);
+            strcopy(g_EntArray[g_iEntCounts][ent_filtername], 32, temp);
+            
+            kv.GetString("hasfiltername", temp, 32);
+            g_EntArray[g_iEntCounts][ent_hasfiltername] = (strcmp(temp, "true", false) == 0);
+            
+            kv.GetString("hammerid", temp, 32);
+            g_EntArray[g_iEntCounts][ent_hammerid] = StringToInt(temp);
+
+            kv.GetString("mode", temp, 32);
+            g_EntArray[g_iEntCounts][ent_mode] = StringToInt(temp);
+
+            kv.GetString("maxuses", temp, 32);
+            g_EntArray[g_iEntCounts][ent_maxuses] = StringToInt(temp);
+            
+            kv.GetString("startcd", temp, 32);
+            g_EntArray[g_iEntCounts][ent_startcd] = StringToInt(temp);
+
+            kv.GetString("cooldown", temp, 32);
+            g_EntArray[g_iEntCounts][ent_cooldown] = StringToInt(temp);
+
+            kv.GetString("glow", temp, 32);
+            g_EntArray[g_iEntCounts][ent_weaponglow] = (strcmp(temp, "true", false) == 0);
+
+            kv.GetString("hud", temp, 32);
+            g_EntArray[g_iEntCounts][ent_displayhud] = (strcmp(temp, "true", false) == 0);
+            
+            g_EntArray[g_iEntCounts][ent_ismulti] = buffer_amount > 1 ? true : false;
+
+            kv.GetString("team", temp, 32);
+            if(strcmp(temp, "human", false) == 0)
+                g_EntArray[g_iEntCounts][ent_team] = 3;
+            else
+                g_EntArray[g_iEntCounts][ent_team] = 2;
+
+            g_iEntCounts++;
+            
+            if(g_iEntCounts == MAXENT)
+            {
+                LogError("Entities array is full. current: %d  limit: %d", g_iEntCounts, MAXENT);
+                return;
+            }
+        }
+    }
+    while(kv.GotoNextKey());
 }
 
 static void CheckClientKnife(int client)
 {
     if(g_tKnife[client] != null)
         KillTimer(g_tKnife[client]);
-    g_tKnife[client] = CreateTimer(1.0, Timer_CheckKnife, client);
+    g_tKnife[client] = CreateTimer(0.1, Timer_CheckKnife, client);
 }
 
 public Action Timer_CheckKnife(Handle timer, int client)
@@ -1860,6 +1939,15 @@ static int FindIndexByHammerId(int hammerid)
 {
     for(int index = 0; index < g_iEntCounts; index++)
         if(g_EntArray[index][ent_hammerid] == hammerid)
+            return index;
+
+    return -1;
+}
+
+static int FindRealIndexByOnwer(int index, int onwer)
+{
+    for(; index < g_iEntCounts; index++)
+        if(g_EntArray[index][ent_ownerid] == onwer)
             return index;
 
     return -1;
