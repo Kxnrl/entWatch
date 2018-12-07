@@ -289,6 +289,7 @@ public Action Command_Reload(int args)
 {
     OnMapEnd();
     OnMapStart();
+    OnConfigsExecuted();
 }
 
 public void OnMapStart()
@@ -341,7 +342,6 @@ public void OnMapEnd()
 {
     StopTimer(g_tRound);
     StopTimer(g_tCooldown);
-
 }
 
 //public void OnEntityCreated(int entity, const char[] classname)
