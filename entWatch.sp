@@ -38,7 +38,7 @@
 #define PI_NAME "[CSGO] entWatch"
 #define PI_AUTH "Kyle"
 #define PI_DESC "Notify players about entity interactions."
-#define PI_VERS "1.2.0"
+#define PI_VERS "1.3.0"
 #define PI_URLS "https://kxnrl.com"
 
 public Plugin myinfo = 
@@ -83,8 +83,7 @@ enum Entity
     ent_team,               //  2 = Zombies , 3 = Humans
     bool:ent_displayhud,
     bool:ent_weaponglow,
-    bool:ent_pickedup,
-    bool:ent_ismulti,
+    bool:ent_pickedup
 }
 
 enum Forward
@@ -139,6 +138,9 @@ static bool g_bLateload;
 static bool g_extDHook;
 static Handle hAcceptInput;
 
+static int g_iTeam[MAXPLY];
+static int g_iEntTeam[2048];
+
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
     RegPluginLibrary("entWatch");
@@ -192,9 +194,10 @@ public void OnPluginStart()
     SMUtils_SetChatConSnd(true);
     SMUtils_SetTextDest(HUD_PRINTCENTER);
 
-    HookEventEx("round_start",  Event_RoundStart,   EventHookMode_Post);
-    HookEventEx("round_end",    Event_RoundEnd,     EventHookMode_Post);
-    HookEventEx("player_death", Event_PlayerDeath,  EventHookMode_Post);
+    HookEventEx("round_start",    Event_RoundStart,   EventHookMode_Post);
+    HookEventEx("round_end",      Event_RoundEnd,     EventHookMode_Post);
+    HookEventEx("player_death",   Event_PlayerDeath,  EventHookMode_Post);
+    HookEventEx("player_team",    Event_PlayerTeams,  EventHookMode_Post);
 
     g_Cookies[Restricted] = RegClientCookie("entwatch_restricted", "", CookieAccess_Private);
     g_Cookies[BanByAdmin] = RegClientCookie("entwatch_banbyadmin", "", CookieAccess_Private);
@@ -323,7 +326,6 @@ public void OnConfigsExecuted()
         g_EntArray[index][ent_cooldowntime]   = -1;
         g_EntArray[index][ent_weaponglow]     = false;
         g_EntArray[index][ent_displayhud]     = false;
-        g_EntArray[index][ent_ismulti]        = false;
         g_EntArray[index][ent_team]           = -1;
         g_EntArray[index][ent_glowref]   = INVALID_ENT_REFERENCE;
     }
@@ -418,35 +420,34 @@ public void OnClientDisconnect(int client)
 
     if(g_bConfigLoaded && g_bHasEnt[client])
     {
-        int index = FindIndexByClient(client);
-
-        if(index >= 0)
-        {
-            int weapon = EntRefToEntIndex(g_EntArray[index][ent_weaponref]);
-
-            g_EntArray[index][ent_ownerid] = -1;
-
-            if(IsValidEdict(weapon))
+        for(int index = 0; index < MAXENT; ++index)
+            if(g_EntArray[index][ent_ownerid] == client)
             {
-                SDKHooks_DropWeapon(client, weapon);
-                RequestFrame(SetWeaponGlow, index);
-            }
+                int weapon = EntRefToEntIndex(g_EntArray[index][ent_weaponref]);
 
-            ClearIcon(client);
-            RefreshHud();
-            
-            Call_StartForward(g_Forward[OnDropped]);
-            Call_PushCell(client);
-            Call_PushCell(DR_OnDisconnect);
-            Call_PushString(g_EntArray[index][ent_name]);
-            Call_Finish();
+                g_EntArray[index][ent_ownerid] = -1;
+
+                if(IsValidEdict(weapon))
+                {
+                    SDKHooks_DropWeapon(client, weapon);
+                    RequestFrame(SetWeaponGlow, index);
+                }
+
+                ClearIcon(client);
+                RefreshHud();
+
+                Call_StartForward(g_Forward[OnDropped]);
+                Call_PushCell(client);
+                Call_PushCell(DR_OnDisconnect);
+                Call_PushString(g_EntArray[index][ent_name]);
+                Call_Finish();
 
 #if defined USE_TRANSLATIONS
-            tChatTeam(g_EntArray[index][ent_team], true, "%t", "disconnected with ent", client, g_EntArray[index][ent_name]);
+                tChatTeam(g_EntArray[index][ent_team], true, "%t", "disconnected with ent", client, g_EntArray[index][ent_name]);
 #else
-            ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01离开游戏时带着神器\x04%s", client, g_EntArray[index][ent_name]);
+                ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01离开游戏时带着神器\x04%s", client, g_EntArray[index][ent_name]);
 #endif
-        }
+            }
     }
 
     SDKUnhook(client, SDKHook_WeaponDropPost,  Event_WeaponDropPost);
@@ -493,12 +494,18 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
     if(g_tRound != null)
         KillTimer(g_tRound);
     g_tRound = CreateTimer(5.0, Timer_RoundStart);
-    
+
     static ConVar mp_disconnect_kills_players = null;
     if(mp_disconnect_kills_players == null)
         mp_disconnect_kills_players = FindConVar("mp_disconnect_kills_players");
 
     mp_disconnect_kills_players.SetInt(0, true, true);
+    
+    static ConVar mp_weapons_glow_on_ground = null;
+    if(mp_weapons_glow_on_ground == null)
+        mp_weapons_glow_on_ground = FindConVar("mp_weapons_glow_on_ground");
+
+    mp_weapons_glow_on_ground.SetInt(0, true, true);
 }
 
 public void Event_RoundEnd(Event event, const char[] name, bool dontBroadcast)
@@ -522,6 +529,20 @@ public Action Timer_RoundStart(Handle timer)
     return Plugin_Stop;
 }
 
+public void ZE_OnFirstInfected(int[] clients, int numClients, bool teleportOverride, bool teleport)
+{
+    for(int client = 0; client < numClients; ++client)
+        DropClientEnt(client);
+}
+
+public void ZR_OnClientInfected(int client, int attacker, bool motherInfect, bool respawnOverride, bool respawn)
+{
+    if(!motherInfect)
+        return;
+    
+    DropClientEnt(client);
+}
+
 public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
     if(!g_bConfigLoaded)
@@ -529,45 +550,54 @@ public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast
     
     int client = GetClientOfUserId(event.GetInt("userid"));
 
+    DropClientEnt(client);
+}
+
+static void DropClientEnt(int client)
+{
     if(!g_bHasEnt[client])
         return;
 
-    int index = FindIndexByClient(client);
-    
-    if(index < 0)
-        return;
+    for(int index = 0; index < MAXENT; ++index)
+        if(g_EntArray[index][ent_ownerid] == client)
+        {
+            int weaponid = EntRefToEntIndex(g_EntArray[index][ent_weaponref]);
 
-    int weaponid = EntRefToEntIndex(g_EntArray[index][ent_weaponref]);
+            if(IsValidEdict(weaponid))
+            {
+                SDKHooks_DropWeapon(client, weaponid);
+                RequestFrame(SetWeaponGlow, index);
+            }
 
-    if(IsValidEdict(weaponid))
-    {
-        SDKHooks_DropWeapon(client, weaponid);
-        RequestFrame(SetWeaponGlow, index);
-    }
-
-    g_EntArray[index][ent_ownerid] = -1;
-    
-    Call_StartForward(g_Forward[OnDropped]);
-    Call_PushCell(client);
-    Call_PushCell(DR_OnDeath);
-    Call_PushString(g_EntArray[index][ent_name]);
-    Call_Finish();
-
+            g_EntArray[index][ent_ownerid] = -1;
+            
+            Call_StartForward(g_Forward[OnDropped]);
+            Call_PushCell(client);
+            Call_PushCell(DR_OnDeath);
+            Call_PushString(g_EntArray[index][ent_name]);
+            Call_Finish();
+            
 #if defined USE_TRANSLATIONS
-    tChatTeam(g_EntArray[index][ent_team], true, "%t", "died with ent", client, g_EntArray[index][ent_name]);
+            tChatTeam(g_EntArray[index][ent_team], true, "%t", "died with ent", client, g_EntArray[index][ent_name]);
 #else
-    ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01死亡时带着神器\x04%s", client, g_EntArray[index][ent_name]);
+            ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01死亡时带着神器\x04%s", client, g_EntArray[index][ent_name]);
 #endif
+        }
 
     RefreshHud();
     SetClientDefault(client);
 }
 
+public void Event_PlayerTeams(Event e, const char[] name, bool dontBroadcast)
+{
+    g_iTeam[GetClientOfUserId(e.GetInt("userid"))] = e.GetInt("team");
+}
+
 public void OnEntityCreated(int entity, const char[] classname)
 {
-    if(classname[6] != '_' || StrContains(classname, "weapon_", false) != 0)
+    if(StrContains(classname, "weapon_", false) != 0)
         return;
-    
+
     SDKHook(entity, SDKHook_SpawnPost, Event_WeaponCreated);
 }
 
@@ -578,12 +608,17 @@ public void Event_WeaponCreated(int entity)
     if(!IsValidEdict(entity))
         return;
 
+    RequestFrame(Event_CreatedPost, entity);
+}
+
+static void Event_CreatedPost(int entity)
+{
+    if(!IsValidEdict(entity))
+        return;
+
     char classname[32];
 
     if(!GetEdictClassname(entity, classname, 32))
-        return;
-
-    if(StrContains(classname, "weapon_", false) != 0)
         return;
 
     int hammerid = GetEntityHammerID(entity);
@@ -591,19 +626,20 @@ public void Event_WeaponCreated(int entity)
     if(hammerid <= 0)
         return;
 
-    int index = FindIndexByHammerId(hammerid);
+    for(int index = 0; index < g_iEntCounts; ++index)
+        if(g_EntArray[index][ent_hammerid] == hammerid)
+        {
+            //PrintToServer("Event_WeaponCreated -> %d -> match -> %d", entity, hammerid);
+            if(g_EntArray[index][ent_weaponref] == -1)
+            {
+                g_EntArray[index][ent_weaponref] = EntIndexToEntRef(entity);
+                RequestFrame(SetWeaponGlow, index);
+                //PrintToServer("Event_WeaponCreated -> %d -> Validate -> %d", entity, index);
+                break;
+            }
+        }
 
-    if(index < 0)
-        return;
-
-    while(IsValidEdict(EntRefToEntIndex(g_EntArray[index][ent_weaponref]))) index++;
-    
-    if(g_EntArray[index][ent_hammerid] != hammerid)
-        return;
-
-    g_EntArray[index][ent_weaponref] = EntIndexToEntRef(entity);
-
-    RequestFrame(SetWeaponGlow, index);
+    //PrintToServer("Event_WeaponCreated -> %d -> not found -> %d", entity, hammerid);
 }
 
 public void Event_WeaponEquipPost(int client, int weapon)
@@ -619,23 +655,25 @@ public void Event_WeaponEquipPost(int client, int weapon)
     if(hamid <= 0)
         return;
 
-    int index = FindIndexByHammerId(hamid);
+    int iref = EntIndexToEntRef(weapon);
     
+    int index = -1;
+    for(int x = 0; x < g_iEntCounts; ++x)
+        if(g_EntArray[x][ent_hammerid] == hamid)
+            if(g_EntArray[x][ent_weaponref] == iref)
+            {
+                index = x;
+                break;
+            }
+
     if(index < 0)
         return;
+    
+    if(!g_EntArray[index][ent_pickedup])
+        g_EntArray[index][ent_cooldowntime] = g_EntArray[index][ent_startcd];
 
-    while(ClientIsAlive(g_EntArray[index][ent_ownerid])) index++;
-
-    if(g_EntArray[index][ent_hammerid] != hamid)
-    {
-        LogError("g_EntArray[][ent_hammerid] is out-of-bouns. -> hammerid = %d", hamid);
-        return;
-    }
-
-    g_EntArray[index][ent_cooldowntime] = g_EntArray[index][ent_pickedup] ? -1 : g_EntArray[index][ent_startcd];
-    g_EntArray[index][ent_weaponref]    = EntIndexToEntRef(weapon);
-    g_EntArray[index][ent_ownerid]      = client;
-    g_EntArray[index][ent_pickedup]     = true;
+    g_EntArray[index][ent_ownerid]   = client;
+    g_EntArray[index][ent_pickedup]  = true;
 
     CreateIcon(client);
     RemoveWeaponGlow(index);
@@ -869,7 +907,7 @@ public Action Timer_CheckFilter(Handle timer, DataPack pack)
 
     if(button != -1 && g_extDHook)
     {
-        PrintToServer("DHookEntity func_button [%d]", button);
+        //PrintToServer("DHookEntity func_button [%d]", button);
         DHookEntity(hAcceptInput, true, button);
     }
 
@@ -885,40 +923,31 @@ public void Event_WeaponDropPost(int client, int weapon)
 
     if(g_bConfigLoaded)
     {
-        int index = FindIndexByHammerId(GetEntityHammerID(weapon));
+        int index = FindIndexByEntityRef(EntIndexToEntRef(weapon));
 
         if(index >= 0)
         {
-            index = FindRealIndexByOnwer(index, client);
+            SetClientDefault(client);
+            RequestFrame(SetWeaponGlow, index);
 
-            int weaponindex = EntRefToEntIndex(g_EntArray[index][ent_weaponref]);
-
-            if(weaponindex == weapon)
-            {
-                SetClientDefault(client);
-                RequestFrame(SetWeaponGlow, index);
-
-                g_EntArray[index][ent_ownerid] = -1;
-                
-                if(g_EntArray[index][ent_buttonid] != -1)
-                    SDKUnhook(g_EntArray[index][ent_buttonid], SDKHook_Use, Event_ButtonUse);
+            g_EntArray[index][ent_ownerid] = -1;
+            
+            if(g_EntArray[index][ent_buttonid] != -1)
+                SDKUnhook(g_EntArray[index][ent_buttonid], SDKHook_Use, Event_ButtonUse);
 
 #if defined USE_TRANSLATIONS
-                tChatTeam(g_EntArray[index][ent_team], true, "%t", "droped ent", client, g_EntArray[index][ent_name]);
+            tChatTeam(g_EntArray[index][ent_team], true, "%t", "droped ent", client, g_EntArray[index][ent_name]);
 #else
-                ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01丟掉了神器\x04%s", client, g_EntArray[index][ent_name]);
+            ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01丟掉了神器\x04%s", client, g_EntArray[index][ent_name]);
 #endif
 
-                RefreshHud();
-                
-                Call_StartForward(g_Forward[OnDropped]);
-                Call_PushCell(client);
-                Call_PushCell(DR_NormalDrop);
-                Call_PushString(g_EntArray[index][ent_name]);
-                Call_Finish();
-            }
-            else
-                LogError("Event_OnWeaponDropPost -> weapon[%d] -> index[%d] -> entref[%d] -> entidx[%d]", weapon, index, g_EntArray[index][ent_weaponref], weaponindex);
+            RefreshHud();
+            
+            Call_StartForward(g_Forward[OnDropped]);
+            Call_PushCell(client);
+            Call_PushCell(DR_NormalDrop);
+            Call_PushString(g_EntArray[index][ent_name]);
+            Call_Finish();
 
             return;
         }
@@ -934,6 +963,11 @@ public void Event_WeaponDropPost(int client, int weapon)
 
     AcceptEntityInput(weapon, "KillHierarchy");
     //if(!SelfKillEntityEx(weapon, 15.0)) AcceptEntityInput(weapon, "KillHierarchy");
+}
+
+public Action Event_SetTransmit(int entity, int client)
+{
+    return g_iEntTeam[entity] == g_iTeam[client] ? Plugin_Continue : Plugin_Handled;
 }
 
 static void SetClientDefault(int client)
@@ -975,7 +1009,7 @@ public Action Event_WeaponCanUse(int client, int weapon)
     if(index < 0)
         return Plugin_Continue;
 
-    if(g_EntArray[index][ent_team] != GetClientTeam(client))
+    if(g_EntArray[index][ent_team] != g_iTeam[client])
     {
         //CheckClientKnife(client);
         return Plugin_Handled;
@@ -1038,19 +1072,16 @@ public Action Event_ButtonUse(int button, int activator, int caller, UseType typ
         //LogMessage("Event_ButtonUse -> %N -> g_fPickup", activator);
         return Plugin_Handled;
     }
-    
-    if(!g_EntArray[index][ent_ismulti])
-    {
-        int iOffset = FindDataMapInfo(button, "m_bLocked");
 
-        if(iOffset != -1 && GetEntData(button, iOffset, 1))
-        {
-            //LogMessage("Event_ButtonUse -> %N -> iOffset", activator);
-            return Plugin_Handled;
-        }
+    int iOffset = FindDataMapInfo(button, "m_bLocked");
+
+    if(iOffset != -1 && GetEntData(button, iOffset, 1))
+    {
+        //LogMessage("Event_ButtonUse -> %N -> iOffset", activator);
+        return Plugin_Handled;
     }
 
-    if(g_EntArray[index][ent_team] != GetClientTeam(activator))
+    if(g_EntArray[index][ent_team] != g_iTeam[activator])
     {
         //LogMessage("Event_ButtonUse -> %N -> GetClientTeam");
         return Plugin_Handled;
@@ -1160,8 +1191,8 @@ public MRESReturn Event_AcceptInput(int pThis, Handle hReturn, Handle hParams)
 
     char command[128];
     DHookGetParamString(hParams, 1, command, 128);
-    PrintToServer("Event_AcceptInput pThis -> %d.%s -> %s", pThis, classname, command);
-    
+    //PrintToServer("Event_AcceptInput pThis -> %d.%s -> %s", pThis, classname, command);
+
     // Tested on ze_sandstorm_go_v1_3
     if(strcmp(classname, "func_button") == 0)
     {
@@ -1300,6 +1331,7 @@ static void CountdownMessage(int index)
 #else        
             ChatTeam(g_EntArray[index][ent_team], true, "\x07%s\x04冷却时间已结束\x01[\x07无人使用\x01]", g_EntArray[index][ent_name]);
 #endif
+            CreateTimer(1.1, Timer_RefreshGlow, index);
         }
     }
     else if(ClientIsValid(g_EntArray[index][ent_ownerid]))
@@ -1329,6 +1361,18 @@ static void CountdownMessage(int index)
             }
         }
     }
+}
+
+public Action Timer_RefreshGlow(Handle timer, int index)
+{
+    if(ClientIsAlive(g_EntArray[index][ent_ownerid]))
+        return Plugin_Stop;
+
+    RemoveWeaponGlow(index);
+    //PrintToServer("[Timer_RefreshGlow] -> %d", index);
+    RequestFrame(SetWeaponGlow, index);
+
+    return Plugin_Stop;
 }
 
 static void BuildHUDandScoreboard(int index)
@@ -1531,35 +1575,37 @@ static void BanClientEnt(int client, int target, int time)
 
     if(g_bHasEnt[target])
     {
-        int index = FindIndexByClient(target);
-        
-        g_EntArray[index][ent_ownerid] = -1;
-
-        int weapon_index_1 = GetPlayerWeaponSlot(target, 1);
-        int weapon_index_2 = GetPlayerWeaponSlot(target, 2);
-
-        int weapon = EntRefToEntIndex(g_EntArray[index][ent_weaponref]);
-
-        if(IsValidEdict(weapon))
-        {
-            if(weapon_index_1 == weapon || weapon_index_2 == weapon)
+        for(int index = 0; index < MAXENT; ++index)
+            if(g_EntArray[index][ent_ownerid] == client)
             {
-                SDKHooks_DropWeapon(target, weapon);
-                RequestFrame(SetWeaponGlow, index);
+                g_EntArray[index][ent_ownerid] = -1;
+
+                int weapon_index_1 = GetPlayerWeaponSlot(target, 1);
+                int weapon_index_2 = GetPlayerWeaponSlot(target, 2);
+                
+                int weapon = EntRefToEntIndex(g_EntArray[index][ent_weaponref]);
+                
+                if(IsValidEdict(weapon))
+                {
+                    if(weapon_index_1 == weapon || weapon_index_2 == weapon)
+                    {
+                        SDKHooks_DropWeapon(target, weapon);
+                        RequestFrame(SetWeaponGlow, index);
 
 #if defined USE_TRANSLATIONS
-                tChatTeam(g_EntArray[index][ent_team], true, "%t", "ent dropped", g_EntArray[index][ent_name]);
+                        tChatTeam(g_EntArray[index][ent_team], true, "%t", "ent dropped", g_EntArray[index][ent_name]);
 #else
-                ChatTeam(g_EntArray[index][ent_team], true, "\x04%s\x0C已掉落", g_EntArray[index][ent_name]);
+                        ChatTeam(g_EntArray[index][ent_team], true, "\x04%s\x0C已掉落", g_EntArray[index][ent_name]);
 #endif
 
-                Call_StartForward(g_Forward[OnDropped]);
-                Call_PushCell(client);
-                Call_PushCell(DR_OnBanned);
-                Call_PushString(g_EntArray[index][ent_name]);
-                Call_Finish();
+                        Call_StartForward(g_Forward[OnDropped]);
+                        Call_PushCell(client);
+                        Call_PushCell(DR_OnBanned);
+                        Call_PushString(g_EntArray[index][ent_name]);
+                        Call_Finish();
+                    }
+                }
             }
-        }
 
         SetClientDefault(client);
     }
@@ -1708,7 +1754,7 @@ public Action Command_Transfer(int client, int args)
         if(!g_bHasEnt[x])
             continue;
 
-        if(GetClientTeam(client) != GetClientTeam(x))
+        if(g_iTeam[client] != g_iTeam[x])
             continue;
 
         FormatEx(m_szId,    8, "%d", GetClientUserId(x));
@@ -1756,38 +1802,39 @@ static void TransferClientEnt(int client, int target)
         return;
     }
 
-    int index = FindIndexByClient(target);
-    
-    if(index < 0)
-        return;
-
-    int weapon = EntRefToEntIndex(g_EntArray[index][ent_weaponref]);
-
-    if(!IsValidEdict(weapon))
-        return;
-
-    char buffer_classname[64];
-    GetEdictClassname(weapon, buffer_classname, 64);
-
-    SDKHooks_DropWeapon(target, weapon);
-    GivePlayerItem(target, buffer_classname);
-    EquipPlayerWeapon(client, weapon);
-
+    for(int index = 0; index < MAXENT; ++index)
+        if(g_EntArray[index][ent_ownerid] == target)
+        {
+            int weapon = EntRefToEntIndex(g_EntArray[index][ent_weaponref]);
+            
+            char buffer_classname[64];
+            GetEdictClassname(weapon, buffer_classname, 64);
+            
+            SDKHooks_DropWeapon(target, weapon);
+            GivePlayerItem(target, buffer_classname);
+            EquipPlayerWeapon(client, weapon);
+            
 #if defined USE_TRANSLATIONS
-    tChatAll("%t", "transfer ent", client, target, g_EntArray[index][ent_name]);
+            tChatAll("%t", "transfer ent", client, target, g_EntArray[index][ent_name]);
 #else
-    ChatAll("\x0C%N\x01拿走了\x0C%N\x01手上的神器[\x04%s\x01]", client, target, g_EntArray[index][ent_name]);
+            ChatAll("\x0C%N\x01拿走了\x0C%N\x01手上的神器[\x04%s\x01]", client, target, g_EntArray[index][ent_name]);
 #endif
 
-    LogAction(client, -1, "%L transfer %L item %s [entWatch]", client, target, g_EntArray[index][ent_name]);
+            LogAction(client, -1, "%L transfer %L item %s [entWatch]", client, target, g_EntArray[index][ent_name]);
 
-    RemoveWeaponGlow(index);
-    
-    Call_StartForward(g_Forward[OnTransfered]);
-    Call_PushCell(client);
-    Call_PushCell(target);
-    Call_PushString(g_EntArray[index][ent_name]);
-    Call_Finish();
+            RemoveWeaponGlow(index);
+
+            Call_StartForward(g_Forward[OnTransfered]);
+            Call_PushCell(client);
+            Call_PushCell(target);
+            Call_PushString(g_EntArray[index][ent_name]);
+            Call_Finish();
+        }
+
+    g_bHasEnt[client] = true;
+    g_bHasEnt[target] = false;
+
+    RefreshHud();
 }
 
 static void LoadConfig()
@@ -1879,8 +1926,6 @@ static void ImportKeyValies(KeyValues kv)
 
             kv.GetString("hud", temp, 32);
             g_EntArray[g_iEntCounts][ent_displayhud] = (strcmp(temp, "true", false) == 0);
-            
-            g_EntArray[g_iEntCounts][ent_ismulti] = buffer_amount > 1 ? true : false;
 
             kv.GetString("team", temp, 32);
             if(strcmp(temp, "human", false) == 0)
@@ -1944,19 +1989,10 @@ static int FindIndexByHammerId(int hammerid)
     return -1;
 }
 
-static int FindRealIndexByOnwer(int index, int onwer)
-{
-    for(; index < g_iEntCounts; index++)
-        if(g_EntArray[index][ent_ownerid] == onwer)
-            return index;
-
-    return -1;
-}
-
-static int FindIndexByClient(int client)
+static int FindIndexByEntityRef(int ref)
 {
     for(int index = 0; index < g_iEntCounts; index++)
-        if(g_EntArray[index][ent_ownerid] == client)
+        if(g_EntArray[index][ent_weaponref] == ref)
             return index;
 
     return -1;
@@ -1995,7 +2031,10 @@ static void SetWeaponGlow(int index)
         return;
 
     if(IsValidEdict(EntRefToEntIndex(g_EntArray[index][ent_glowref])))
+    {
+        //PrintToServer("[SetWeaponGlow] Blocked -> %d -> by Ref", index);
         return;
+    }
 
     float origin[3];
     float angle[3];
@@ -2004,7 +2043,10 @@ static void SetWeaponGlow(int index)
     int weapon = EntRefToEntIndex(g_EntArray[index][ent_weaponref]);
     
     if(!IsValidEdict(weapon))
+    {
+        //PrintToServer("[SetWeaponGlow] Blocked -> %d -> by weapon", index);
         return;
+    }
 
     GetEntPropVector(weapon, Prop_Send, "m_vecOrigin", origin);
     GetEntPropVector(weapon, Prop_Send, "m_angRotation", angle);
@@ -2054,8 +2096,14 @@ static void SetWeaponGlow(int index)
     TeleportEntity(glow, origin, angle, NULL_VECTOR);
 
     SetEntityParent(glow, weapon);
+    
+    g_iEntTeam[glow] = g_EntArray[index][ent_team];
 
     g_EntArray[index][ent_glowref] = EntIndexToEntRef(glow);
+    
+    SDKHookEx(glow, SDKHook_SetTransmit, Event_SetTransmit);
+    
+    //PrintToServer("[SetWeaponGlow] Created -> %d", index);
 }
 
 static void RemoveWeaponGlow(int index)
@@ -2115,8 +2163,12 @@ static void CreateIcon(int client)
     TeleportEntity(iEnt, fOrigin, NULL_VECTOR, NULL_VECTOR);
 
     SetEntityParent(iEnt, client);
+    
+    g_iEntTeam[iEnt] = g_iTeam[client];
 
     g_iIconRef[client] = EntIndexToEntRef(iEnt);
+
+    SDKHookEx(iEnt, SDKHook_SetTransmit, Event_SetTransmit);
 }
 
 static void ClearIcon(int client)
@@ -2142,5 +2194,5 @@ static bool IsInfector(int client)
     if(g_pZombieReload)
         return ZR_IsClientZombie(client);
 
-    return (GetClientTeam(client) == 2);
+    return (g_iTeam[client] == 2);
 }
