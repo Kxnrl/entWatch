@@ -38,7 +38,7 @@
 #define PI_NAME "[CSGO] entWatch"
 #define PI_AUTH "Kyle"
 #define PI_DESC "Notify players about entity interactions."
-#define PI_VERS "1.3.0"
+#define PI_VERS "1.3.2"
 #define PI_URLS "https://kxnrl.com"
 
 public Plugin myinfo = 
@@ -668,6 +668,8 @@ public void Event_WeaponEquipPost(int client, int weapon)
 
     if(index < 0)
         return;
+
+    g_EntArray[index][ent_team] = g_iTeam[client];
     
     if(!g_EntArray[index][ent_pickedup])
         g_EntArray[index][ent_cooldowntime] = g_EntArray[index][ent_startcd];
@@ -994,8 +996,10 @@ public Action Event_WeaponCanUse(int client, int weapon)
 
     if(!IsPlayerAlive(client))
         return Plugin_Handled;
+    
+    bool knife = IsWeaponKnife(weapon);
 
-    if(IsInfector(client) && !IsWeaponKnife(weapon))
+    if(IsInfector(client) && !knife)
         return Plugin_Handled;
 
     if(!g_bConfigLoaded)
@@ -1009,25 +1013,25 @@ public Action Event_WeaponCanUse(int client, int weapon)
     if(index < 0)
         return Plugin_Continue;
 
-    if(g_EntArray[index][ent_team] != g_iTeam[client])
-    {
-        //CheckClientKnife(client);
-        return Plugin_Handled;
-    }
-
-    if(!CanClientUseEnt(client))
-    {
-        CheckClientKnife(client);
-        return Plugin_Handled;
-    }
-
     bool allow = true;
     Call_StartForward(g_Forward[OnPick]);
     Call_PushCell(client);
     Call_PushString(g_EntArray[index][ent_name]);
     Call_Finish(allow);
 
-    return allow ? Plugin_Continue : Plugin_Handled;
+    if(!allow && CanClientUseEnt(client))
+    {
+        // allow to pick up
+        return Plugin_Continue;
+    }
+
+    if(knife)
+    {
+        // knife stripper?
+        CheckClientKnife(client);
+    }
+
+    return Plugin_Handled;
 }
 
 static bool CanClientUseEnt(int client)
