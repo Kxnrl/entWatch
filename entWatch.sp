@@ -26,11 +26,17 @@
 
 #undef REQUIRE_EXTENSIONS
 #include <dhooks>
+#if SOURCEMOD_V_REV >= 6372
+#include <topmenus>
+#endif
 #define REQUIRE_EXTENSIONS
 
 #undef REQUIRE_PLUGIN
 #include <ZombieEscape>
 #include <zombiereloaded>
+#if SOURCEMOD_V_REV >= 6372
+#include <adminmenu>
+#endif
 #define REQUIRE_PLUGIN
 
 #define USE_TRANSLATIONS  // if load translations
@@ -38,7 +44,7 @@
 #define PI_NAME "[CSGO] entWatch"
 #define PI_AUTH "Kyle"
 #define PI_DESC "Notify players about entity interactions."
-#define PI_VERS "1.3.2"
+#define PI_VERS "1.3.3"
 #define PI_URLS "https://kxnrl.com"
 
 public Plugin myinfo = 
@@ -212,14 +218,15 @@ public void OnPluginStart()
     g_Forward[OnBanned]     = CreateGlobalForward("entWatch_OnClientBanned",    ET_Ignore, Param_Cell);
     g_Forward[OnUnban]      = CreateGlobalForward("entWatch_OnClientUnban",     ET_Ignore, Param_Cell);
 
-    RegConsoleCmd("sm_estats",  Command_Stats);
-    RegConsoleCmd("sm_ehud",    Command_DisplayHud);
+    RegConsoleCmd("sm_entwatch", Command_entWatch);
+    RegConsoleCmd("sm_estats",   Command_Stats);
+    RegConsoleCmd("sm_ehud",     Command_DisplayHud);
 
-    RegAdminCmd("sm_eban",      Command_Restrict,   ADMFLAG_BAN);
-    RegAdminCmd("sm_eunban",    Command_Unrestrict, ADMFLAG_BAN);
-    RegAdminCmd("sm_etransfer", Command_Transfer,   ADMFLAG_BAN);
+    RegAdminCmd("sm_eban",       Command_Restrict,   ADMFLAG_BAN);
+    RegAdminCmd("sm_eunban",     Command_Unrestrict, ADMFLAG_BAN);
+    RegAdminCmd("sm_etransfer",  Command_Transfer,   ADMFLAG_BAN);
 
-    RegServerCmd("sm_ereload",  Command_Reload);
+    RegServerCmd("sm_ereload",   Command_Reload);
 
     g_aPreHammerId[Pre_Button] = new ArrayList();
     g_aPreHammerId[Pre_Weapon] = new ArrayList();
@@ -244,6 +251,11 @@ public void OnPluginStart()
         
         if(LibraryExists("dhooks"))
             OnLibraryAdded("dhooks");
+
+#if SOURCEMOD_V_REV >= 6372
+        if(LibraryExists("adminmenu"))
+            OnLibraryAdded("adminmenu");
+#endif
     }
 }
 
@@ -277,6 +289,14 @@ public void OnLibraryAdded(const char[] name)
 
         g_extDHook = true;
     }
+#if SOURCEMOD_V_REV >= 6372
+    else if(LibraryExists("adminmenu"))
+    {
+        TopMenu menu = GetAdminTopMenu();
+        if(menu != null)
+            OnAdminMenuReady(menu);
+    }
+#endif
 }
 
 public void OnLibraryRemoved(const char[] name)
@@ -287,6 +307,53 @@ public void OnLibraryRemoved(const char[] name)
         LogError("Dhook library has been removed.");
     }
 }
+
+#if SOURCEMOD_V_REV >= 6372
+enum struct AdminMenuType
+{
+    TopMenuObject sm_eban;
+    TopMenuObject sm_eunban;
+    TopMenuObject sm_etransfer;
+}
+static AdminMenuType g_TopItem;
+static TopMenuObject entwatch_commands;
+public void OnAdminMenuReady(Handle aTopMenu)
+{
+    TopMenu topmenu = TopMenu.FromHandle(aTopMenu);
+
+    entwatch_commands = topmenu.AddCategory("entwatch", AdminMenuHandler, "ehud", ADMFLAG_BAN);
+
+    if(entwatch_commands != INVALID_TOPMENUOBJECT)
+    {
+        g_TopItem.sm_eban      = topmenu.AddItem("sm_eban",      AdminMenuHandler, entwatch_commands, "sm_eban",      ADMFLAG_BAN);
+        g_TopItem.sm_eunban    = topmenu.AddItem("sm_eunban",    AdminMenuHandler, entwatch_commands, "sm_eunban",    ADMFLAG_BAN);
+        g_TopItem.sm_etransfer = topmenu.AddItem("sm_etransfer", AdminMenuHandler, entwatch_commands, "sm_etransfer", ADMFLAG_BAN);
+    }
+}
+
+public void AdminMenuHandler(TopMenu topmenu, TopMenuAction action, TopMenuObject topobj_id, int param, char[] buffer, int maxlength)
+{
+    if(action == TopMenuAction_DisplayTitle)
+    {
+        if(topobj_id == entwatch_commands)
+            FormatEx(buffer, maxlength, "entWatch: ");
+    }
+    else if(action == TopMenuAction_DisplayOption)
+    {
+        if(topobj_id == entwatch_commands)             FormatEx(buffer, maxlength, "entWatch");
+        else if(topobj_id == g_TopItem.sm_eban)        FormatEx(buffer, maxlength, "玩家指令");
+        else if(topobj_id == g_TopItem.sm_eunban)      FormatEx(buffer, maxlength, "插件管理");
+        else if(topobj_id == g_TopItem.sm_etransfer)   FormatEx(buffer, maxlength, "参数管理");
+    }
+    else if(action == TopMenuAction_SelectOption)
+    {
+        if(topobj_id == entwatch_commands)             { }
+        else if(topobj_id == g_TopItem.sm_eban)        DisplayMenu_Restrict(param);
+        else if(topobj_id == g_TopItem.sm_eunban)      DisplayMenu_Unrestrict(param);
+        else if(topobj_id == g_TopItem.sm_etransfer)   DisplayMenu_Transfer(param);
+    }
+}
+#endif
 
 public Action Command_Reload(int args)
 {
@@ -1436,6 +1503,15 @@ static void BuildHUDandScoreboard(int index)
     }
 }
 
+public Action Command_entWatch(int client, int args)
+{
+    // ....
+    // Todo
+    // ....
+    Command_Stats(client, 0);
+    return Plugin_Handled;
+}
+
 public Action Command_Stats(int client, int args)
 {
     if(!AreClientCookiesCached(client))
@@ -1495,9 +1571,16 @@ public Action Command_DisplayHud(int client, int args)
 
 public Action Command_Restrict(int client, int args)
 {
-    if(!client || !IsClientInGame(client))
+    if(!client)
         return Plugin_Handled;
     
+    DisplayMenu_Restrict(client);
+
+    return Plugin_Handled;
+}
+
+static void DisplayMenu_Restrict(int client)
+{
     Menu menu = new Menu(MenuHandler_Ban);
     
     menu.SetTitle("[entWatch]  Ban Menu\n ");
@@ -1515,18 +1598,14 @@ public Action Command_Restrict(int client, int args)
         menu.AddItem(m_szId, m_szName);
     }
 
-    if(menu.ItemCount >= 1)
-    {
-        menu.ExitButton = false;
-        menu.Display(client, 30);
-    }
-    else
+    if(menu.ItemCount < 1)
     {
         Chat(client, "No player in target list");
         delete menu;
+        return;
     }
 
-    return Plugin_Handled;
+    menu.Display(client, 30);
 }
 
 public int MenuHandler_Ban(Menu menu, MenuAction action, int client, int itemNum) 
@@ -1543,9 +1622,16 @@ public int MenuHandler_Ban(Menu menu, MenuAction action, int client, int itemNum
 
 static void BuildBanLengthMenu(int client, const char[] target)
 {
+    int m = GetClientOfUserId(StringToInt(target));
+    if(!m)
+    {
+        Chat(client, "Target client disconnected.");
+        return;
+    }
+
     Menu menu = new Menu(MenuHandler_Time);
     
-    menu.SetTitle("[entWatch]  Select Time\n ");
+    menu.SetTitle("[entWatch]  Select Time\n Target: %N\n ", m);
 
     menu.AddItem(target, "", ITEMDRAW_IGNORE);
 
@@ -1664,6 +1750,16 @@ static void BanClientEnt(int client, int target, int time)
 
 public Action Command_Unrestrict(int client, int args)
 {
+    if(!client)
+        return Plugin_Handled;
+    
+    DisplayMenu_Unrestrict(client);
+
+    return Plugin_Handled;
+}
+
+static void DisplayMenu_Unrestrict(int client)
+{
     Menu menu = new Menu(MenuHandler_Unban);
 
     menu.SetTitle("[entWatch]  UnBan\n ");
@@ -1684,18 +1780,14 @@ public Action Command_Unrestrict(int client, int args)
         menu.AddItem(m_szId, m_szName);
     }
 
-    if(menu.ItemCount >= 1)
+    if(menu.ItemCount < 1)
     {
-        menu.ExitButton = false;
-        menu.Display(client, 30);
-    }
-    else
-    {
-        Chat(client, "No player in ban list");
+        Chat(client, "No player in target list");
         delete menu;
+        return;
     }
 
-    return Plugin_Handled;
+    menu.Display(client, 30);
 }
 
 public int MenuHandler_Unban(Menu menu, MenuAction action, int client, int itemNum) 
@@ -1744,9 +1836,16 @@ static void UnestrictClientEnt(int client, int target)
 
 public Action Command_Transfer(int client, int args)
 {
-    if(!g_bConfigLoaded)
+    if(!g_bConfigLoaded || !client)
         return Plugin_Handled;
 
+    DisplayMenu_Transfer(client);
+    
+    return Plugin_Handled;
+}
+
+static void DisplayMenu_Transfer(int client)
+{
     Menu menu = new Menu(MenuHandler_Transfer);
     
     menu.SetTitle("[entWatch]  Transfer\n ");
@@ -1770,18 +1869,14 @@ public Action Command_Transfer(int client, int args)
         menu.AddItem(m_szId, m_szName);
     }
 
-    if(menu.ItemCount >= 1)
-    {
-        SetMenuExitButton(menu, false);
-        DisplayMenu(menu, client, 0);
-    }
-    else
+    if(menu.ItemCount < 1)
     {
         Chat(client, "No one pickup item.");
-        CloseHandle(menu);
+        delete menu;
+        return;
     }
-    
-    return Plugin_Handled;
+
+    menu.Display(client, 30);
 }
 
 public int MenuHandler_Transfer(Menu menu, MenuAction action, int client, int itemNum) 
@@ -1797,7 +1892,7 @@ public int MenuHandler_Transfer(Menu menu, MenuAction action, int client, int it
     }
     else if(action == MenuAction_End)
     {
-        CloseHandle(menu);
+        delete menu;
     }
 }
 
