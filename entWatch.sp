@@ -1019,7 +1019,7 @@ public Action Event_WeaponCanUse(int client, int weapon)
     Call_PushString(g_EntArray[index][ent_name]);
     Call_Finish(allow);
 
-    if(!allow && CanClientUseEnt(client))
+    if(allow && CanClientUseEnt(client))
     {
         // allow to pick up
         return Plugin_Continue;
@@ -1931,12 +1931,6 @@ static void ImportKeyValies(KeyValues kv)
             kv.GetString("hud", temp, 32);
             g_EntArray[g_iEntCounts][ent_displayhud] = (strcmp(temp, "true", false) == 0);
 
-            kv.GetString("team", temp, 32);
-            if(strcmp(temp, "human", false) == 0)
-                g_EntArray[g_iEntCounts][ent_team] = 3;
-            else
-                g_EntArray[g_iEntCounts][ent_team] = 2;
-
             g_iEntCounts++;
             
             if(g_iEntCounts == MAXENT)
@@ -1951,9 +1945,9 @@ static void ImportKeyValies(KeyValues kv)
 
 static void CheckClientKnife(int client)
 {
-    if(g_tKnife[client] != null)
-        KillTimer(g_tKnife[client]);
-    g_tKnife[client] = CreateTimer(0.1, Timer_CheckKnife, client);
+    if(g_tKnife[client] == null)
+        g_tKnife[client] = CreateTimer(0.3, Timer_CheckKnife, client);
+    //KillTimer(g_tKnife[client]);
 }
 
 public Action Timer_CheckKnife(Handle timer, int client)
