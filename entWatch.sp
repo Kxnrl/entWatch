@@ -969,6 +969,9 @@ public void Event_WeaponDropPost(int client, int weapon)
 
 public Action Event_SetTransmit(int entity, int client)
 {
+    if(g_iEntTeam[entity] <= 1)
+        return Plugin_Continue;
+
     return g_iEntTeam[entity] == g_iTeam[client] ? Plugin_Continue : Plugin_Handled;
 }
 
