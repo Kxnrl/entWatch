@@ -86,7 +86,7 @@ enum Entity
     ent_startcd,
     ent_cooldown,
     ent_cooldowntime,
-    ent_team,               //  2 = Zombies , 3 = Humans
+    ent_team,
     bool:ent_displayhud,
     bool:ent_weaponglow,
     bool:ent_pickedup
@@ -341,9 +341,10 @@ public void AdminMenuHandler(TopMenu topmenu, TopMenuAction action, TopMenuObjec
     else if(action == TopMenuAction_DisplayOption)
     {
         if(topobj_id == entwatch_commands)             FormatEx(buffer, maxlength, "entWatch");
-        else if(topobj_id == g_TopItem.sm_eban)        FormatEx(buffer, maxlength, "玩家指令");
-        else if(topobj_id == g_TopItem.sm_eunban)      FormatEx(buffer, maxlength, "插件管理");
-        else if(topobj_id == g_TopItem.sm_etransfer)   FormatEx(buffer, maxlength, "参数管理");
+        else if(topobj_id == g_TopItem.sm_eban)        FormatEx(buffer, maxlength, "Ban client");
+        else if(topobj_id == g_TopItem.sm_eunban)      FormatEx(buffer, maxlength, "Unban client");
+        else if(topobj_id == g_TopItem.sm_etransfer)   FormatEx(buffer, maxlength, "Transfer Item");
+        else                                           FormatEx(buffer, maxlength, "entWatch");
     }
     else if(action == TopMenuAction_SelectOption)
     {
@@ -1036,7 +1037,7 @@ public void Event_WeaponDropPost(int client, int weapon)
 
 public Action Event_SetTransmit(int entity, int client)
 {
-    if(g_iEntTeam[entity] <= 1)
+    if(g_iEntTeam[entity] <= 1 || g_iTeam[client] <= 1)
         return Plugin_Continue;
 
     return g_iEntTeam[entity] == g_iTeam[client] ? Plugin_Continue : Plugin_Handled;
@@ -2196,9 +2197,11 @@ static void SetWeaponGlow(int index)
     g_iEntTeam[glow] = g_EntArray[index][ent_team];
 
     g_EntArray[index][ent_glowref] = EntIndexToEntRef(glow);
-    
+
     SDKHookEx(glow, SDKHook_SetTransmit, Event_SetTransmit);
     
+    ChatAll("Setup glow for %d", index);
+
     //PrintToServer("[SetWeaponGlow] Created -> %d", index);
 }
 
