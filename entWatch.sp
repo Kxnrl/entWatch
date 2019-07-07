@@ -1380,7 +1380,7 @@ static void CountdownMessage(int index)
     {
         if(ClientIsAlive(g_EntArray[index][ent_ownerid]))
         {
-            if(g_bEntHud[g_EntArray[index][ent_ownerid]])
+            if(!g_bEntHud[g_EntArray[index][ent_ownerid]])
             {
                 if(g_EntArray[index][ent_cooldowntime] > 0)
                 {
@@ -1413,7 +1413,7 @@ static void CountdownMessage(int index)
     {
         if(g_EntArray[index][ent_mode] == 3 && g_EntArray[index][ent_uses] >= g_EntArray[index][ent_maxuses])
         {
-            if(g_bEntHud[g_EntArray[index][ent_ownerid]])
+            if(!g_bEntHud[g_EntArray[index][ent_ownerid]])
             {
                 SetHudTextParams(-1.0, 0.05, 2.0, 255, 0, 0, 233, 0, 30.0, 0.0, 0.0);
 #if defined USE_TRANSLATIONS
@@ -1425,7 +1425,7 @@ static void CountdownMessage(int index)
         }
         else
         {
-            if(g_bEntHud[g_EntArray[index][ent_ownerid]])
+            if(!g_bEntHud[g_EntArray[index][ent_ownerid]])
             {
                 SetHudTextParams(-1.0, 0.05, 2.0, 0, 255, 0, 255, 0, 30.0, 0.0, 0.0);
 #if defined USE_TRANSLATIONS
@@ -1564,7 +1564,8 @@ public Action Command_DisplayHud(int client, int args)
     }
 
     g_bEntHud[client] = !g_bEntHud[client];
-    
+    SetClientCookie(client, g_Cookies[DisplayHud], g_bEntHud[client] ? "1" : "0");
+
     Chat(client, "entWatch HUD is \x02%s\x01!", g_bEntHud[client] ? "\x07Off\x01" : "\x04On\x01");
 
     return Plugin_Handled;
