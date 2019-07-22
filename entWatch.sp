@@ -18,6 +18,7 @@
 #pragma semicolon 1
 #pragma newdecls required
 
+#include <sourcemod>
 #include <smutils>          //https://github.com/Kxnrl/sourcemod-utils
 #include <cstrike>
 #include <sdkhooks>
@@ -44,7 +45,7 @@
 #define PI_NAME "[CSGO] entWatch"
 #define PI_AUTH "Kyle"
 #define PI_DESC "Notify players about entity interactions."
-#define PI_VERS "1.3.3"
+#define PI_VERS "1.4.0"
 #define PI_URLS "https://kxnrl.com"
 
 public Plugin myinfo = 
@@ -89,7 +90,8 @@ enum Entity
     ent_team,
     bool:ent_displayhud,
     bool:ent_weaponglow,
-    bool:ent_pickedup
+    bool:ent_pickedup,
+    bool:ent_autotrasfer
 }
 
 enum Forward
@@ -484,6 +486,10 @@ public void OnClientDisconnect(int client)
     if(!IsClientInGame(client))
         return;
 
+    SDKUnhook(client, SDKHook_WeaponDropPost,  Event_WeaponDropPost);
+    SDKUnhook(client, SDKHook_WeaponEquipPost, Event_WeaponEquipPost);
+    SDKUnhook(client, SDKHook_WeaponCanUse,    Event_WeaponCanUse);
+
     StopTimer(g_tKnife[client]);
 
     if(g_bConfigLoaded && g_bHasEnt[client])
@@ -491,6 +497,16 @@ public void OnClientDisconnect(int client)
         for(int index = 0; index < MAXENT; ++index)
             if(g_EntArray[index][ent_ownerid] == client)
             {
+                if(g_EntArray[index][ent_autotrasfer])
+                {
+                    int target = AutoTarget(client);
+                    if(target != -1)
+                    {
+                        TransferClientEnt(target, client, true);
+                        continue;
+                    }
+                }
+
                 int weapon = EntRefToEntIndex(g_EntArray[index][ent_weaponref]);
 
                 g_EntArray[index][ent_ownerid] = -1;
@@ -518,9 +534,8 @@ public void OnClientDisconnect(int client)
             }
     }
 
-    SDKUnhook(client, SDKHook_WeaponDropPost,  Event_WeaponDropPost);
-    SDKUnhook(client, SDKHook_WeaponEquipPost, Event_WeaponEquipPost);
-    SDKUnhook(client, SDKHook_WeaponCanUse,    Event_WeaponCanUse);
+    if (IsPlayerAlive(client))
+        StripWeapon(client, true);
 }
 
 static void ResetAllStats()
@@ -568,7 +583,7 @@ public void Event_RoundStart(Event event, const char[] name, bool dontBroadcast)
         mp_disconnect_kills_players = FindConVar("mp_disconnect_kills_players");
 
     mp_disconnect_kills_players.SetInt(0, true, true);
-    
+
     static ConVar mp_weapons_glow_on_ground = null;
     if(mp_weapons_glow_on_ground == null)
         mp_weapons_glow_on_ground = FindConVar("mp_weapons_glow_on_ground");
@@ -644,7 +659,7 @@ static void DropClientEnt(int client)
             Call_PushCell(DR_OnDeath);
             Call_PushString(g_EntArray[index][ent_name]);
             Call_Finish();
-            
+
 #if defined USE_TRANSLATIONS
             tChatTeam(g_EntArray[index][ent_team], true, "%t", "died with ent", client, g_EntArray[index][ent_name]);
 #else
@@ -775,6 +790,9 @@ public void Event_WeaponEquipPost(int client, int weapon)
             }
         }
     }
+
+    if(g_EntArray[index][ent_hasfiltername])
+        DispatchKeyValue(client, "targetname", g_EntArray[index][ent_filtername]);
 
 #if defined USE_TRANSLATIONS
     tChatTeam(g_EntArray[index][ent_team], true, "%t", "pickup ent", client, g_EntArray[index][ent_name]);
@@ -1898,7 +1916,7 @@ public int MenuHandler_Transfer(Menu menu, MenuAction action, int client, int it
     }
 }
 
-static void TransferClientEnt(int client, int target)
+static void TransferClientEnt(int client, int target, bool autoTransfer = false)
 {
     if(!ClientIsAlive(target))
     {
@@ -1917,16 +1935,38 @@ static void TransferClientEnt(int client, int target)
             SDKHooks_DropWeapon(target, weapon);
             GivePlayerItem(target, buffer_classname);
             EquipPlayerWeapon(client, weapon);
-            
-#if defined USE_TRANSLATIONS
-            tChatAll("%t", "transfer ent", client, target, g_EntArray[index][ent_name]);
-#else
-            ChatAll("\x0C%N\x01拿走了\x0C%N\x01手上的神器[\x04%s\x01]", client, target, g_EntArray[index][ent_name]);
-#endif
 
-            LogAction(client, -1, "%L transfer %L item %s [entWatch]", client, target, g_EntArray[index][ent_name]);
+            if(!autoTransfer)
+            {
+
+#if defined USE_TRANSLATIONS
+                tChatAll("%t", "transfer ent", client, target, g_EntArray[index][ent_name]);
+#else
+                ChatAll("\x0C%N\x01拿走了\x0C%N\x01手上的神器[\x04%s\x01]", client, target, g_EntArray[index][ent_name]);
+#endif
+                LogAction(client, -1, "%L transfer %L item %s [entWatch]", client, target, g_EntArray[index][ent_name]);
+            }
+            else
+            {
+#if defined USE_TRANSLATIONS
+                tChatAll("%t", "autotransfer ent", client, target, g_EntArray[index][ent_name]);
+#else
+                ChatAll("\x0C%N\x01的遗志由\x0C%N\x01来继承: [\x04%s\x01]", client, target, g_EntArray[index][ent_name]);
+#endif
+            }
 
             RemoveWeaponGlow(index);
+
+            Call_StartForward(g_Forward[OnDropped]);
+            Call_PushCell(target);
+            Call_PushCell(DR_OnTransfer);
+            Call_PushString(g_EntArray[index][ent_name]);
+            Call_Finish();
+
+            Call_StartForward(g_Forward[OnPicked]);
+            Call_PushCell(client);
+            Call_PushString(g_EntArray[index][ent_name]);
+            Call_Finish();
 
             Call_StartForward(g_Forward[OnTransfered]);
             Call_PushCell(client);
@@ -1939,6 +1979,21 @@ static void TransferClientEnt(int client, int target)
     g_bHasEnt[target] = false;
 
     RefreshHud();
+}
+
+static int AutoTarget(int source)
+{
+    for(int client = 0; client <= MaxClients; ++client)
+    {
+        if(!ClientIsAlive(client) || g_iTeam[source] != g_iTeam[client] || g_bHasEnt[client])
+            continue;
+
+        if (GetUserAdmin(client) == INVALID_ADMIN_ID)
+            continue;
+
+        return client;
+    }
+    return -1;
 }
 
 static void LoadConfig()
@@ -2025,11 +2080,14 @@ static void ImportKeyValies(KeyValues kv)
             kv.GetString("cooldown", temp, 32);
             g_EntArray[g_iEntCounts][ent_cooldown] = StringToInt(temp);
 
-            kv.GetString("glow", temp, 32);
+            kv.GetString("glow", temp, 32, "true");
             g_EntArray[g_iEntCounts][ent_weaponglow] = (strcmp(temp, "true", false) == 0);
 
-            kv.GetString("hud", temp, 32);
+            kv.GetString("hud", temp, 32, "true");
             g_EntArray[g_iEntCounts][ent_displayhud] = (strcmp(temp, "true", false) == 0);
+
+            kv.GetString("autotrasfer", temp, 32, "true");
+            g_EntArray[g_iEntCounts][ent_autotrasfer] = (strcmp(temp, "true", false) == 0);
 
             g_iEntCounts++;
             
@@ -2200,10 +2258,6 @@ static void SetWeaponGlow(int index)
     g_EntArray[index][ent_glowref] = EntIndexToEntRef(glow);
 
     SDKHookEx(glow, SDKHook_SetTransmit, Event_SetTransmit);
-    
-    ChatAll("Setup glow for %d", index);
-
-    //PrintToServer("[SetWeaponGlow] Created -> %d", index);
 }
 
 static void RemoveWeaponGlow(int index)

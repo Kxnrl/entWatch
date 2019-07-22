@@ -37,11 +37,12 @@ enum Drop_Reason
     DR_OnDisconnect,
     DR_NormalDrop,
     DR_OnBanned,
+    DR_OnTransfer,
 }
 
 native bool entWatch_HasbeenBanned(int client);
 native bool entWatch_ClientHasItem(int client);
-native bool entWatch_EntityIsItem(int client);
+native bool entWatch_EntityIsItem(int entity);
 
 forward bool entWatch_OnPickItem(int client, const char[] ent_name);
 forward void entWatch_OnPickedItem(int client, const char[] ent_name);
