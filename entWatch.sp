@@ -386,7 +386,7 @@ public void OnConfigsExecuted()
         g_EntArray[index][ent_filtername][0]  = '\0';
         g_EntArray[index][ent_hasfiltername]  = false;
         g_EntArray[index][ent_hammerid]       = -1;
-        g_EntArray[index][ent_weaponref]      = -1;
+        g_EntArray[index][ent_weaponref]      = INVALID_ENT_REFERENCE;
         g_EntArray[index][ent_buttonid]       = -1;
         g_EntArray[index][ent_ownerid]        = -1;
         g_EntArray[index][ent_mode]           = 0;
@@ -397,7 +397,7 @@ public void OnConfigsExecuted()
         g_EntArray[index][ent_weaponglow]     = false;
         g_EntArray[index][ent_displayhud]     = false;
         g_EntArray[index][ent_team]           = -1;
-        g_EntArray[index][ent_glowref]   = INVALID_ENT_REFERENCE;
+        g_EntArray[index][ent_glowref]        = INVALID_ENT_REFERENCE;
     }
 
     LoadConfig();
@@ -614,8 +614,8 @@ public Action Timer_RoundStart(Handle timer)
 
 public void ZE_OnFirstInfected(int[] clients, int numClients, bool teleportOverride, bool teleport)
 {
-    for(int client = 0; client < numClients; ++client)
-        DropClientEnt(client);
+    for(int x = 0; x < numClients; ++x)
+        DropClientEnt(clients[x]);
 }
 
 public void ZR_OnClientInfected(int client, int attacker, bool motherInfect, bool respawnOverride, bool respawn)
@@ -1929,13 +1929,20 @@ static void TransferClientEnt(int client, int target, bool autoTransfer = false)
         {
             int weapon = EntRefToEntIndex(g_EntArray[index][ent_weaponref]);
             
-            char buffer_classname[64];
-            GetEdictClassname(weapon, buffer_classname, 64);
-            
-            SDKHooks_DropWeapon(target, weapon);
-            GivePlayerItem(target, buffer_classname);
-            EquipPlayerWeapon(client, weapon);
+            if(IsValidEdict(weapon))
+            {
+                SDKHooks_DropWeapon(target, weapon);
+                EquipPlayerWeapon(client, weapon);
 
+                if(!autotrasfer)
+                {
+                    char buffer_classname[64];
+                    GetEdictClassname(weapon, buffer_classname, 64);
+                    GivePlayerItem(target, buffer_classname);
+                }
+            }
+            
+            // chat 
             if(!autoTransfer)
             {
 
