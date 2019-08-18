@@ -45,7 +45,7 @@
 #define PI_NAME "[CSGO] entWatch"
 #define PI_AUTH "Kyle"
 #define PI_DESC "Notify players about entity interactions."
-#define PI_VERS "1.4.0"
+#define PI_VERS "1.4.1"
 #define PI_URLS "https://kxnrl.com"
 
 public Plugin myinfo = 
@@ -128,6 +128,7 @@ static int  g_iScores[MAXPLY] = {0, ...};
 static int  g_iIconRef[MAXPLY] = {INVALID_ENT_REFERENCE, ...};
 
 static bool g_bConfigLoaded    = false;
+static bool g_bMapsDDSRadar    = false;
 static bool g_bHasEnt[MAXPLY]  = false;
 static bool g_bBanned[MAXPLY]  = false;
 static bool g_bEntHud[MAXPLY]  = false;
@@ -204,6 +205,7 @@ public void OnPluginStart()
 
     HookEventEx("round_start",    Event_RoundStart,   EventHookMode_Post);
     HookEventEx("round_end",      Event_RoundEnd,     EventHookMode_Post);
+    HookEventEx("player_spawn",   Event_PlayerSpawn,  EventHookMode_Post);
     HookEventEx("player_death",   Event_PlayerDeath,  EventHookMode_Post);
     HookEventEx("player_team",    Event_PlayerTeams,  EventHookMode_Post);
 
@@ -374,6 +376,10 @@ public void OnMapStart()
 
 public void OnConfigsExecuted()
 {
+    char map[128];
+    GetCurrentMap(map, 128);
+    g_bMapsDDSRadar = CheckMapRadar(map);
+
     g_aPreHammerId[Pre_Weapon].Clear();
     g_aPreHammerId[Pre_Button].Clear();
     g_aPreHammerId[Pre_Locked].Clear();
@@ -386,7 +392,7 @@ public void OnConfigsExecuted()
         g_EntArray[index][ent_filtername][0]  = '\0';
         g_EntArray[index][ent_hasfiltername]  = false;
         g_EntArray[index][ent_hammerid]       = -1;
-        g_EntArray[index][ent_weaponref]      = INVALID_ENT_REFERENCE;
+        g_EntArray[index][ent_weaponref]      = -1;
         g_EntArray[index][ent_buttonid]       = -1;
         g_EntArray[index][ent_ownerid]        = -1;
         g_EntArray[index][ent_mode]           = 0;
@@ -397,7 +403,7 @@ public void OnConfigsExecuted()
         g_EntArray[index][ent_weaponglow]     = false;
         g_EntArray[index][ent_displayhud]     = false;
         g_EntArray[index][ent_team]           = -1;
-        g_EntArray[index][ent_glowref]        = INVALID_ENT_REFERENCE;
+        g_EntArray[index][ent_glowref]   = INVALID_ENT_REFERENCE;
     }
 
     LoadConfig();
@@ -517,8 +523,8 @@ public void OnClientDisconnect(int client)
                     RequestFrame(SetWeaponGlow, index);
                 }
 
-                ClearIcon(client);
-                RefreshHud();
+                if(g_EntArray[index][ent_buttonid] != -1)
+                    SDKUnhook(g_EntArray[index][ent_buttonid], SDKHook_Use, Event_ButtonUse);
 
                 Call_StartForward(g_Forward[OnDropped]);
                 Call_PushCell(client);
@@ -532,6 +538,9 @@ public void OnClientDisconnect(int client)
                 ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01离开游戏时带着神器\x04%s", client, g_EntArray[index][ent_name]);
 #endif
             }
+        
+        ClearIcon(client);
+        RefreshHud();
     }
 
     if (IsPlayerAlive(client))
@@ -614,8 +623,8 @@ public Action Timer_RoundStart(Handle timer)
 
 public void ZE_OnFirstInfected(int[] clients, int numClients, bool teleportOverride, bool teleport)
 {
-    for(int x = 0; x < numClients; ++x)
-        DropClientEnt(clients[x]);
+    for(int client = 0; client < numClients; ++client)
+        DropClientEnt(client);
 }
 
 public void ZR_OnClientInfected(int client, int attacker, bool motherInfect, bool respawnOverride, bool respawn)
@@ -626,14 +635,34 @@ public void ZR_OnClientInfected(int client, int attacker, bool motherInfect, boo
     DropClientEnt(client);
 }
 
+public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
+{
+    RequestFrame(SetClientRadar, event.GetInt("userid"));
+}
+
+static void SetClientRadar(int userid)
+{
+    int client = GetClientOfUserId(userid);
+    if (IsClientInGame(client))
+    {
+        static int defaultHud = -10086;
+        if(defaultHud == -10086) 
+            defaultHud = GetEntProp(client, Prop_Send, "m_iHideHUD");
+
+        SetEntProp(client, Prop_Send, "m_iHideHUD", g_bMapsDDSRadar ? defaultHud : 1<<12);
+    }
+}
+
 public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
     if(!g_bConfigLoaded)
         return;
     
-    int client = GetClientOfUserId(event.GetInt("userid"));
+    int userid = event.GetInt("userid");
+    int client = GetClientOfUserId(userid);
 
     DropClientEnt(client);
+    RequestFrame(SetClientRadar, userid);
 }
 
 static void DropClientEnt(int client)
@@ -653,7 +682,10 @@ static void DropClientEnt(int client)
             }
 
             g_EntArray[index][ent_ownerid] = -1;
-            
+
+            if(g_EntArray[index][ent_buttonid] != -1)
+                SDKUnhook(g_EntArray[index][ent_buttonid], SDKHook_Use, Event_ButtonUse);
+
             Call_StartForward(g_Forward[OnDropped]);
             Call_PushCell(client);
             Call_PushCell(DR_OnDeath);
@@ -1011,34 +1043,40 @@ public void Event_WeaponDropPost(int client, int weapon)
 
     if(g_bConfigLoaded)
     {
-        int index = FindIndexByEntityRef(EntIndexToEntRef(weapon));
+        bool other = false;
 
-        if(index >= 0)
+        for(int index = 0; index < g_iEntCounts; index++)
         {
-            SetClientDefault(client);
-            RequestFrame(SetWeaponGlow, index);
+            if(g_EntArray[index][ent_ownerid] != client)
+                continue;
 
-            g_EntArray[index][ent_ownerid] = -1;
-            
-            if(g_EntArray[index][ent_buttonid] != -1)
-                SDKUnhook(g_EntArray[index][ent_buttonid], SDKHook_Use, Event_ButtonUse);
+            if(EntIndexToEntRef(weapon) == g_EntArray[index][ent_weaponref])
+            {
+                RequestFrame(SetWeaponGlow, index);
+
+                g_EntArray[index][ent_ownerid] = -1;
+                
+                if(g_EntArray[index][ent_buttonid] != -1)
+                    SDKUnhook(g_EntArray[index][ent_buttonid], SDKHook_Use, Event_ButtonUse);
 
 #if defined USE_TRANSLATIONS
-            tChatTeam(g_EntArray[index][ent_team], true, "%t", "droped ent", client, g_EntArray[index][ent_name]);
+                tChatTeam(g_EntArray[index][ent_team], true, "%t", "droped ent", client, g_EntArray[index][ent_name]);
 #else
-            ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01丟掉了神器\x04%s", client, g_EntArray[index][ent_name]);
+                ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01丟掉了神器\x04%s", client, g_EntArray[index][ent_name]);
 #endif
 
-            RefreshHud();
-            
-            Call_StartForward(g_Forward[OnDropped]);
-            Call_PushCell(client);
-            Call_PushCell(DR_NormalDrop);
-            Call_PushString(g_EntArray[index][ent_name]);
-            Call_Finish();
-
-            return;
+                RefreshHud();
+                
+                Call_StartForward(g_Forward[OnDropped]);
+                Call_PushCell(client);
+                Call_PushCell(DR_NormalDrop);
+                Call_PushString(g_EntArray[index][ent_name]);
+                Call_Finish();
+            }
+            else other = true;
         }
+
+        if(!other) SetClientDefault(client);
     }
 
     char targetname[32];
@@ -1069,6 +1107,8 @@ static void SetClientDefault(int client)
 
     CS_SetClientContributionScore(client, CS_GetClientContributionScore(client) - g_iScores[client]);
     CS_SetClientClanTag(client, g_szClantag[client]);
+
+    DispatchKeyValue(client, "targetname", "human");
 }
 
 static bool IsWeaponKnife(int weapon)
@@ -1929,20 +1969,16 @@ static void TransferClientEnt(int client, int target, bool autoTransfer = false)
         {
             int weapon = EntRefToEntIndex(g_EntArray[index][ent_weaponref]);
             
-            if(IsValidEdict(weapon))
-            {
-                SDKHooks_DropWeapon(target, weapon);
-                EquipPlayerWeapon(client, weapon);
+            char buffer_classname[64];
+            GetEdictClassname(weapon, buffer_classname, 64);
 
-                if(!autotrasfer)
-                {
-                    char buffer_classname[64];
-                    GetEdictClassname(weapon, buffer_classname, 64);
-                    GivePlayerItem(target, buffer_classname);
-                }
-            }
+            if(g_EntArray[index][ent_buttonid] != -1)
+                SDKUnhook(g_EntArray[index][ent_buttonid], SDKHook_Use, Event_ButtonUse);
             
-            // chat 
+            SDKHooks_DropWeapon(target, weapon);
+            GivePlayerItem(target, buffer_classname);
+            EquipPlayerWeapon(client, weapon);
+
             if(!autoTransfer)
             {
 
@@ -1956,13 +1992,27 @@ static void TransferClientEnt(int client, int target, bool autoTransfer = false)
             else
             {
 #if defined USE_TRANSLATIONS
-                tChatAll("%t", "autotransfer ent", client, target, g_EntArray[index][ent_name]);
+                tChatAll("%t", "autotransfer ent", target, client, g_EntArray[index][ent_name]);
 #else
-                ChatAll("\x0C%N\x01的遗志由\x0C%N\x01来继承: [\x04%s\x01]", client, target, g_EntArray[index][ent_name]);
+                ChatAll("\x0C%N\x01的遗志由\x0C%N\x01来继承: [\x04%s\x01]", target, client, g_EntArray[index][ent_name]);
 #endif
             }
 
             RemoveWeaponGlow(index);
+
+            if(g_EntArray[index][ent_buttonid] != -1)
+                SDKHookEx(g_EntArray[index][ent_buttonid], SDKHook_Use, Event_ButtonUse);
+
+            if(g_EntArray[index][ent_hasfiltername])
+                DispatchKeyValue(client, "targetname", g_EntArray[index][ent_filtername]);
+
+            CreateIcon(client);
+
+            g_bHasEnt[client] = true;
+            g_iScores[client] = 999 - CS_GetClientContributionScore(client);
+            g_fPickup[client] = GetGameTime();
+
+            CS_SetClientContributionScore(client, 999);
 
             Call_StartForward(g_Forward[OnDropped]);
             Call_PushCell(target);
@@ -1984,6 +2034,8 @@ static void TransferClientEnt(int client, int target, bool autoTransfer = false)
 
     g_bHasEnt[client] = true;
     g_bHasEnt[target] = false;
+
+    SetClientDefault(client);
 
     RefreshHud();
 }
@@ -2035,8 +2087,7 @@ static void LoadConfig()
         LogMessage("Load %s successful", path);
         g_tCooldown = CreateTimer(1.0, Timer_Cooldowns, _, TIMER_REPEAT);
     }
-    else
-        LogError("Loaded %s but not found any data", path);
+    else LogError("Loaded %s but not found any data", path);
 }
 
 static void ImportKeyValies(KeyValues kv)
@@ -2147,15 +2198,6 @@ static int FindIndexByHammerId(int hammerid)
 {
     for(int index = 0; index < g_iEntCounts; index++)
         if(g_EntArray[index][ent_hammerid] == hammerid)
-            return index;
-
-    return -1;
-}
-
-static int FindIndexByEntityRef(int ref)
-{
-    for(int index = 0; index < g_iEntCounts; index++)
-        if(g_EntArray[index][ent_weaponref] == ref)
             return index;
 
     return -1;
@@ -2356,4 +2398,34 @@ static bool IsInfector(int client)
         return ZR_IsClientZombie(client);
 
     return (g_iTeam[client] == 2);
+}
+
+static bool CheckMapRadar(const char[] map)
+{
+    char txt[128];
+    FormatEx(txt, 128, "resource/overviews/%s.txt", map);
+
+    if (!FileExists(txt, true))
+    {
+        LogError("Failed to find [%s].", txt);
+        return false;
+    }
+
+    KeyValues kv = new KeyValues(map);
+    if (!kv.ImportFromFile(txt))
+    {
+        delete kv;
+        LogError("Failed to import [%s].", txt);
+        return false;
+    }
+
+    char material[128];
+    kv.GetString("material", material, 128, map);
+    
+    delete kv;
+
+    char dds[128];
+    FormatEx(dds, 128, "resource/%s", material);
+
+    return FileExists(dds, true);
 }
