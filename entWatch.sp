@@ -40,12 +40,15 @@
 #endif
 #define REQUIRE_PLUGIN
 
-#define USE_TRANSLATIONS  // if load translations
+// load translations
+#define USE_TRANSLATIONS  
+// wanna print preconfig message
+//#define PRINT_PRECONFIGS  
 
 #define PI_NAME "[CSGO] entWatch"
 #define PI_AUTH "Kyle"
 #define PI_DESC "Notify players about entity interactions."
-#define PI_VERS "1.4.1"
+#define PI_VERS "1.4.2"
 #define PI_URLS "https://kxnrl.com"
 
 public Plugin myinfo = 
@@ -133,7 +136,7 @@ static bool g_bHasEnt[MAXPLY]  = false;
 static bool g_bBanned[MAXPLY]  = false;
 static bool g_bEntHud[MAXPLY]  = false;
 
-static char g_szGlobalHud[2][2048];
+static char g_szGlobalHud[2][4096];
 static char g_szClantag[MAXPLY][32];
 
 static float g_fPickup[MAXPLY] = {0.0, ...};
@@ -148,7 +151,7 @@ static bool g_extDHook;
 static Handle hAcceptInput;
 
 static int g_iTeam[MAXPLY];
-static int g_iEntTeam[2048];
+static int g_iEntTeam[4096];
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
@@ -849,7 +852,9 @@ static void CheckPreConfigs(int client, int weapon)
     // if was stored.
     if(g_aPreHammerId[Pre_Weapon].FindValue(hammerid) != -1)
     {
+#if defined PRINT_PRECONFIGS
         ChatAll("\x04PreConfigs \x01->\x10 Already record \x01[\x07%d\x01]", hammerid);
+#endif
         return;
     }
 
@@ -857,7 +862,9 @@ static void CheckPreConfigs(int client, int weapon)
     char targetname[128];
     GetEntityTargetName(weapon, targetname, 128);
 
+#if defined PRINT_PRECONFIGS
     ChatAll("\x04PreConfigs \x01->\x05 targetname\x01[\x07%s\x01]", targetname);
+#endif
 
     if(targetname[0] == '\0')
         return;
@@ -880,7 +887,9 @@ static void CheckPreConfigs(int client, int weapon)
     
     if(!found)
         button = -1;
+#if defined PRINT_PRECONFIGS
     else ChatAll("\x04PreConfigs \x01->\x05 funcbutton\x01[\x07%d\x01]", button);
+#endif
 
     DataPack pack;
     CreateDataTimer(0.2, Timer_CheckFilter, pack);
@@ -942,8 +951,10 @@ public Action Timer_CheckFilter(Handle timer, DataPack pack)
     char filtername[128], clientname[128];
     GetEntityTargetName(client, clientname, 128);
 
+#if defined PRINT_PRECONFIGS
     ChatAll("\x04PreConfigs \x01->\x05 clientname\x01[\x07%s\x01]", clientname);
-    
+#endif
+
     int iFilter = -1;
     bool found = false;
     while((iFilter = FindEntityByClassname(iFilter, "filter_activator_name")) != -1)
@@ -960,7 +971,9 @@ public Action Timer_CheckFilter(Handle timer, DataPack pack)
     if(!found)
         strcopy(filtername, 128, "null");
 
+#if defined PRINT_PRECONFIGS
     ChatAll("\x04PreConfigs \x01->\x05 filtername\x01[\x07%s\x01]", filtername);
+#endif
 
     KeyValues kv = new KeyValues("entWatchPre");
 
@@ -1031,7 +1044,9 @@ public Action Timer_CheckFilter(Handle timer, DataPack pack)
         DHookEntity(hAcceptInput, true, button);
     }
 
+#if defined PRINT_PRECONFIGS
     ChatAll("\x04PreConfigs \x01->\x10 Record the data successfully", filtername);
+#endif
 
     return Plugin_Stop;
 }
@@ -1408,8 +1423,8 @@ public Action Timer_Cooldowns(Handle timer)
 
 static void RefreshHud()
 {
-    strcopy(g_szGlobalHud[ZOMBIE], 2048, "[!ehud] Zombie entWatch: ");
-    strcopy(g_szGlobalHud[HUMANS], 2048, "[!ehud] Humans entWatch: ");
+    strcopy(g_szGlobalHud[ZOMBIE], 4096, "[!ehud] Zombie entWatch: ");
+    strcopy(g_szGlobalHud[HUMANS], 4096, "[!ehud] Humans entWatch: ");
 
     for(int index = 0; index < g_iEntCounts; index++)
     {
@@ -1419,11 +1434,11 @@ static void RefreshHud()
 
     if(strcmp(g_szGlobalHud[ZOMBIE], "[!ehud] Zombie entWatch: ") == 0)
         g_szGlobalHud[ZOMBIE][0] = '\0';
-        //Format(g_szGlobalHud[ZOMBIE], 2048, "%s\n", g_szGlobalHud[ZOMBIE]);
+        //Format(g_szGlobalHud[ZOMBIE], 4096, "%s\n", g_szGlobalHud[ZOMBIE]);
 
     if(strcmp(g_szGlobalHud[HUMANS], "[!ehud] Humans entWatch: ") == 0)
         g_szGlobalHud[HUMANS][0] = '\0';
-        //Format(g_szGlobalHud[HUMANS], 2048, "%s\n", g_szGlobalHud[HUMANS]);
+        //Format(g_szGlobalHud[HUMANS], 4096, "%s\n", g_szGlobalHud[HUMANS]);
 
     SetHudTextParams(0.160500, 0.099000, 2.0, 57, 197, 187, 255, 0, 30.0, 0.0, 0.0);
 
@@ -1558,7 +1573,7 @@ static void BuildHUDandScoreboard(int index)
         }
 
         CS_SetClientClanTag(g_EntArray[index][ent_ownerid], szClantag);
-        Format(g_szGlobalHud[g_EntArray[index][ent_team] - 2], 2048, "%s\n%s", g_szGlobalHud[g_EntArray[index][ent_team] - 2], szGameText);
+        Format(g_szGlobalHud[g_EntArray[index][ent_team] - 2], 4096, "%s\n%s", g_szGlobalHud[g_EntArray[index][ent_team] - 2], szGameText);
     }
 }
 
