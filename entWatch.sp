@@ -44,6 +44,8 @@
 #define USE_TRANSLATIONS  
 // wanna print preconfig message
 //#define PRINT_PRECONFIGS  
+// wanna wallhack icon
+//#define USE_WALLHACK
 
 #define PI_NAME "[CSGO] entWatch"
 #define PI_AUTH "Kyle"
@@ -128,7 +130,10 @@ static Handle g_tCooldown      = null;
 
 static int  g_iEntCounts      = MAXENT;
 static int  g_iScores[MAXPLY] = {0, ...};
+
+#if defined USE_WALLHACK
 static int  g_iIconRef[MAXPLY] = {INVALID_ENT_REFERENCE, ...};
+#endif
 
 static bool g_bConfigLoaded    = false;
 static bool g_bMapsDDSRadar    = false;
@@ -541,8 +546,11 @@ public void OnClientDisconnect(int client)
                 ChatTeam(g_EntArray[index][ent_team], true, "\x0C%N\x01离开游戏时带着神器\x04%s", client, g_EntArray[index][ent_name]);
 #endif
             }
-        
+
+#if defined USE_WALLHACK
         ClearIcon(client);
+#endif
+
         RefreshHud();
     }
 
@@ -795,7 +803,10 @@ public void Event_WeaponEquipPost(int client, int weapon)
     g_EntArray[index][ent_ownerid]   = client;
     g_EntArray[index][ent_pickedup]  = true;
 
+#if defined USE_WALLHACK
     CreateIcon(client);
+#endif 
+
     RemoveWeaponGlow(index);
 
     g_bHasEnt[client] = true;
@@ -1116,7 +1127,9 @@ public Action Event_SetTransmit(int entity, int client)
 
 static void SetClientDefault(int client)
 {
+#if defined USE_WALLHACK
     ClearIcon(client);
+#endif
 
     g_bHasEnt[client] = false;
 
@@ -1453,20 +1466,20 @@ static void CountdownMessage(int index)
     {
         if(ClientIsAlive(g_EntArray[index][ent_ownerid]))
         {
-            if(!g_bEntHud[g_EntArray[index][ent_ownerid]])
+            if(g_bEntHud[g_EntArray[index][ent_ownerid]])
             {
                 if(g_EntArray[index][ent_cooldowntime] > 0)
                 {
                     SetHudTextParams(-1.0, 0.05, 2.0, 205, 173, 0, 255, 0, 30.0, 0.0, 0.0);
-                    ShowHudText(g_EntArray[index][ent_ownerid], 6, ">>> [%s] :  %ds <<< ", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime]);
+                    ShowHudText(g_EntArray[index][ent_ownerid], 5, ">>> [%s] :  %ds <<< ", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime]);
                 }
                 else
                 {
                     SetHudTextParams(-1.0, 0.05, 2.0, 0, 255, 0, 255, 0, 30.0, 0.0, 0.0);
 #if defined USE_TRANSLATIONS
-                    ShowHudText(g_EntArray[index][ent_ownerid], 6, "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Ready");
+                    ShowHudText(g_EntArray[index][ent_ownerid], 5, "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Ready");
 #else
-                    ShowHudText(g_EntArray[index][ent_ownerid], 6, "神器[%s]就绪", g_EntArray[index][ent_name]);
+                    ShowHudText(g_EntArray[index][ent_ownerid], 5, "神器[%s]就绪", g_EntArray[index][ent_name]);
 #endif
                 }
             }
@@ -1486,25 +1499,25 @@ static void CountdownMessage(int index)
     {
         if(g_EntArray[index][ent_mode] == 3 && g_EntArray[index][ent_uses] >= g_EntArray[index][ent_maxuses])
         {
-            if(!g_bEntHud[g_EntArray[index][ent_ownerid]])
+            if(g_bEntHud[g_EntArray[index][ent_ownerid]])
             {
                 SetHudTextParams(-1.0, 0.05, 2.0, 255, 0, 0, 233, 0, 30.0, 0.0, 0.0);
 #if defined USE_TRANSLATIONS
-                ShowHudText(g_EntArray[index][ent_ownerid], 6, "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Deplete");
+                ShowHudText(g_EntArray[index][ent_ownerid], 5, "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Deplete");
 #else
-                ShowHudText(g_EntArray[index][ent_ownerid], 6, "神器[%s]耗尽", g_EntArray[index][ent_name]);
+                ShowHudText(g_EntArray[index][ent_ownerid], 5, "神器[%s]耗尽", g_EntArray[index][ent_name]);
 #endif
             }
         }
         else
         {
-            if(!g_bEntHud[g_EntArray[index][ent_ownerid]])
+            if(g_bEntHud[g_EntArray[index][ent_ownerid]])
             {
                 SetHudTextParams(-1.0, 0.05, 2.0, 0, 255, 0, 255, 0, 30.0, 0.0, 0.0);
 #if defined USE_TRANSLATIONS
-                ShowHudText(g_EntArray[index][ent_ownerid], 6, "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Ready");
+                ShowHudText(g_EntArray[index][ent_ownerid], 5, "%t[%s]%t", "Item", g_EntArray[index][ent_name], "Ready");
 #else
-                ShowHudText(g_EntArray[index][ent_ownerid], 6, "神器[%s]就绪", g_EntArray[index][ent_name]);
+                ShowHudText(g_EntArray[index][ent_ownerid], 5, "神器[%s]就绪", g_EntArray[index][ent_name]);
 #endif
             }
         }
@@ -1528,48 +1541,48 @@ static void BuildHUDandScoreboard(int index)
     if(!g_EntArray[index][ent_displayhud])
         return;
 
-    char szClantag[32], szGameText[128];
+    char szClantag[32], szGameText[256];
     strcopy(szClantag, 32, g_EntArray[index][ent_short]);
 
     if(ClientIsAlive(g_EntArray[index][ent_ownerid]))
     {   
         switch(g_EntArray[index][ent_mode])
         {
-            case 1: FormatEx(szGameText, 128, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+            case 1: FormatEx(szGameText, 256, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
             case 2:
             {
                 if(g_EntArray[index][ent_cooldowntime] <= 0)
-                    FormatEx(szGameText, 128, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+                    FormatEx(szGameText, 256, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
                 else
-                    FormatEx(szGameText, 128, "%s[%d]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime], g_EntArray[index][ent_ownerid]);
+                    FormatEx(szGameText, 256, "%s[%d]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime], g_EntArray[index][ent_ownerid]);
             }
             case 3:
             {
                 if(g_EntArray[index][ent_maxuses] > g_EntArray[index][ent_uses])
-                    FormatEx(szGameText, 128, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+                    FormatEx(szGameText, 256, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
                 else
-                    FormatEx(szGameText, 128, "%s[N]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+                    FormatEx(szGameText, 256, "%s[N]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
             }
             case 4:
             {
                 if(g_EntArray[index][ent_cooldowntime] <= 0)
                 {
                     if(g_EntArray[index][ent_maxuses] > g_EntArray[index][ent_uses])
-                        FormatEx(szGameText, 128, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+                        FormatEx(szGameText, 256, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
                     else
-                        FormatEx(szGameText, 128, "%s[N]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+                        FormatEx(szGameText, 256, "%s[N]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
                 }
                 else
-                    FormatEx(szGameText, 128, "%s[%d]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime], g_EntArray[index][ent_ownerid]);
+                    FormatEx(szGameText, 256, "%s[%d]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime], g_EntArray[index][ent_ownerid]);
             }
             case 5:
             {
                 if(g_EntArray[index][ent_cooldowntime] <= 0)
-                    FormatEx(szGameText, 128, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+                    FormatEx(szGameText, 256, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
                 else
-                    FormatEx(szGameText, 128, "%s[%d]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime], g_EntArray[index][ent_ownerid]);
+                    FormatEx(szGameText, 256, "%s[%d]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime], g_EntArray[index][ent_ownerid]);
             }
-            default: FormatEx(szGameText, 128, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+            default: FormatEx(szGameText, 256, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
         }
 
         CS_SetClientClanTag(g_EntArray[index][ent_ownerid], szClantag);
@@ -2021,7 +2034,9 @@ static void TransferClientEnt(int client, int target, bool autoTransfer = false)
             if(g_EntArray[index][ent_hasfiltername])
                 DispatchKeyValue(client, "targetname", g_EntArray[index][ent_filtername]);
 
+#if defined USE_WALLHACK
             CreateIcon(client);
+#endif 
 
             g_bHasEnt[client] = true;
             g_iScores[client] = 999 - CS_GetClientContributionScore(client);
@@ -2356,6 +2371,7 @@ static void AddClientScore(int client, int score)
     CS_SetClientContributionScore(client, CS_GetClientContributionScore(client) + score);
 }
 
+#if defined USE_WALLHACK
 static void CreateIcon(int client)
 {
     if(!ClientIsAlive(client))
@@ -2400,6 +2416,7 @@ static void ClearIcon(int client)
 
     g_iIconRef[client] = INVALID_ENT_REFERENCE;
 }
+#endif 
 
 static bool IsInfector(int client)
 {
