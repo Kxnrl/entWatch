@@ -46,6 +46,8 @@
 //#define PRINT_PRECONFIGS  
 // wanna wallhack icon
 //#define USE_WALLHACK
+// wanna auto disabled radar
+//#define AUTO_HIDERADAR
 
 #define PI_NAME "[CSGO] entWatch"
 #define PI_AUTH "Kyle"
@@ -136,7 +138,9 @@ static int  g_iIconRef[MAXPLY] = {INVALID_ENT_REFERENCE, ...};
 #endif
 
 static bool g_bConfigLoaded    = false;
+#if defined AUTO_HIDERADAR
 static bool g_bMapsDDSRadar    = false;
+#endif
 static bool g_bHasEnt[MAXPLY]  = false;
 static bool g_bBanned[MAXPLY]  = false;
 static bool g_bEntHud[MAXPLY]  = false;
@@ -213,7 +217,9 @@ public void OnPluginStart()
 
     HookEventEx("round_start",    Event_RoundStart,   EventHookMode_Post);
     HookEventEx("round_end",      Event_RoundEnd,     EventHookMode_Post);
+#if defined AUTO_HIDERADAR
     HookEventEx("player_spawn",   Event_PlayerSpawn,  EventHookMode_Post);
+#endif
     HookEventEx("player_death",   Event_PlayerDeath,  EventHookMode_Post);
     HookEventEx("player_team",    Event_PlayerTeams,  EventHookMode_Post);
 
@@ -377,16 +383,20 @@ public Action Command_Reload(int args)
 
 public void OnMapStart()
 {
+#if defined USE_WALLHACK
     AddFileToDownloadsTable("materials/maoling/sprites/ze/entwatch_2017.vmt");
     AddFileToDownloadsTable("materials/maoling/sprites/ze/entwatch_2017.vtf");
     PrecacheModel("materials/maoling/sprites/ze/entwatch_2017.vmt", true);
+#endif
 }
 
 public void OnConfigsExecuted()
 {
+#if defined AUTO_HIDERADAR
     char map[128];
     GetCurrentMap(map, 128);
     g_bMapsDDSRadar = CheckMapRadar(map);
+#endif
 
     g_aPreHammerId[Pre_Weapon].Clear();
     g_aPreHammerId[Pre_Button].Clear();
@@ -646,6 +656,7 @@ public void ZR_OnClientInfected(int client, int attacker, bool motherInfect, boo
     DropClientEnt(client);
 }
 
+#if defined AUTO_HIDERADAR
 public void Event_PlayerSpawn(Event event, const char[] name, bool dontBroadcast)
 {
     RequestFrame(SetClientRadar, event.GetInt("userid"));
@@ -663,6 +674,7 @@ static void SetClientRadar(int userid)
         SetEntProp(client, Prop_Send, "m_iHideHUD", g_bMapsDDSRadar ? defaultHud : 1<<12);
     }
 }
+#endif
 
 public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
 {
@@ -673,7 +685,10 @@ public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast
     int client = GetClientOfUserId(userid);
 
     DropClientEnt(client);
+    
+#if defined AUTO_HIDERADAR
     RequestFrame(SetClientRadar, userid);
+#endif
 }
 
 static void DropClientEnt(int client)
@@ -2432,6 +2447,7 @@ static bool IsInfector(int client)
     return (g_iTeam[client] == 2);
 }
 
+#if defined AUTO_HIDERADAR
 static bool CheckMapRadar(const char[] map)
 {
     char txt[128];
@@ -2461,3 +2477,4 @@ static bool CheckMapRadar(const char[] map)
 
     return FileExists(dds, true);
 }
+#endif
