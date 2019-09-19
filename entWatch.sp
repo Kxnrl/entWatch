@@ -1739,7 +1739,7 @@ static void BuildBanLengthMenu(int client, const char[] target)
     menu.AddItem(target, "", ITEMDRAW_IGNORE);
 
     menu.AddItem("1",   "1 Hour");
-    menu.AddItem("2",   "1 Day");
+    menu.AddItem("24",  "1 Day");
     menu.AddItem("168", "1 Week");
     menu.AddItem("0",   "Permanent");
 

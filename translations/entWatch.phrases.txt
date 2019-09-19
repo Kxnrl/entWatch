@@ -114,7 +114,7 @@
 	"unban ent"
 	{
 		"#format"	"{1:N},{2:N}"
-		"en"		"{green}{2}{normal}: Removed {red}{1}{normal}`s ent ban.}"
+		"en"		"{green}{2}{normal}: Removed {red}{1}{normal}`s ent ban."
 		"chi"		"小朋友{red}{1}{normal}的{red}ban神器{normal}被dalao{green}{2}{normal}解开了"
 		"zho"		"小朋友{red}{1}{normal}的{red}ban神器{normal}被dalao{green}{2}{normal}解开了"
 	}
@@ -200,7 +200,7 @@
 	
 	"ent not ban"
 	{
-		"en"		"You are not restricted"
+		"en"		"You are not restricted."
 		"chi"		"你的神器信用等级{green}良好{normal}..."
 		"zho"		"你的神器信用等級{green}良好{normal}..."
 	}
@@ -208,7 +208,7 @@
 	"ent ban info"
 	{
 		"#format"	"{1:s},{2:s}"
-		"en"		"you go a ban by {1} [Expired: {2}]"
+		"en"		"You have been banned by {1} [Expired: {2}]"
 		"chi"		"你的神器被 {blue}{1}{normal} 封禁了 [到期时间 {red}{2}{normal}]"
 		"zho"		"你的神器被 {blue}{1}{normal} 封禁了 [到期时间 {red}{2}{normal}]"
 	}
