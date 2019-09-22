@@ -1151,7 +1151,7 @@ static void SetClientDefault(int client)
     CS_SetClientContributionScore(client, CS_GetClientContributionScore(client) - g_iScores[client]);
     CS_SetClientClanTag(client, g_szClantag[client]);
 
-    DispatchKeyValue(client, "targetname", "human");
+    //DispatchKeyValue(client, "targetname", "human");
 }
 
 static bool IsWeaponKnife(int weapon)
