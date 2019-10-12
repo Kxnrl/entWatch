@@ -440,15 +440,6 @@ public void OnMapEnd()
     StopTimer(g_tCooldown);
 }
 
-//public void OnEntityCreated(int entity, const char[] classname)
-//{
-//    if(g_extDHook && classname[0] == 'l' && strcmp(classname, "logic_compare", false) == 0)
-//    {
-//        PrintToServer("DHookEntity %s [%d]", classname, entity);
-//        DHookEntity(hAcceptInput, true, entity);
-//    }
-//}
-
 public void OnClientConnected(int client)
 {
     g_bBanned[client] = false;
@@ -1223,9 +1214,12 @@ static bool CanClientUseEnt(int client)
 
 public Action Event_ButtonUse(int button, int activator, int caller, UseType type, float value)
 {
-    if(!g_bConfigLoaded || !IsValidEdict(button) || !ClientIsAlive(activator))
+    if(!g_bConfigLoaded)
         return Plugin_Continue;
-    
+
+    if(!IsValidEdict(button) || !ClientIsAlive(activator))
+        return Plugin_Handled;
+
     //LogMessage("%N pressing %d : %d", activator, button, GetEntityHammerID(button));
     //LogMessage("%d parent is %d", button, GetEntPropEnt(button, Prop_Data, "m_pParent"));
 
@@ -1451,8 +1445,8 @@ public Action Timer_Cooldowns(Handle timer)
 
 static void RefreshHud()
 {
-    strcopy(g_szGlobalHud[ZOMBIE], 4096, "[!ehud] Zombie entWatch: ");
-    strcopy(g_szGlobalHud[HUMANS], 4096, "[!ehud] Humans entWatch: ");
+    strcopy(g_szGlobalHud[ZOMBIE], 4096, "[!ehud] Zombie: ");
+    strcopy(g_szGlobalHud[HUMANS], 4096, "[!ehud] Humans: ");
 
     for(int index = 0; index < g_iEntCounts; index++)
     {
@@ -1460,11 +1454,11 @@ static void RefreshHud()
         BuildHUDandScoreboard(index);
     }
 
-    if(strcmp(g_szGlobalHud[ZOMBIE], "[!ehud] Zombie entWatch: ") == 0)
+    if(strcmp(g_szGlobalHud[ZOMBIE], "[!ehud] Zombie: ") == 0)
         g_szGlobalHud[ZOMBIE][0] = '\0';
         //Format(g_szGlobalHud[ZOMBIE], 4096, "%s\n", g_szGlobalHud[ZOMBIE]);
 
-    if(strcmp(g_szGlobalHud[HUMANS], "[!ehud] Humans entWatch: ") == 0)
+    if(strcmp(g_szGlobalHud[HUMANS], "[!ehud] Humans: ") == 0)
         g_szGlobalHud[HUMANS][0] = '\0';
         //Format(g_szGlobalHud[HUMANS], 4096, "%s\n", g_szGlobalHud[HUMANS]);
 
@@ -1556,48 +1550,50 @@ static void BuildHUDandScoreboard(int index)
     if(!g_EntArray[index][ent_displayhud])
         return;
 
-    char szClantag[32], szGameText[256];
+    char szClantag[32], szGameText[256], szName[16];
     strcopy(szClantag, 32, g_EntArray[index][ent_short]);
 
     if(ClientIsAlive(g_EntArray[index][ent_ownerid]))
-    {   
+    {
+        GetClientName(g_EntArray[index][ent_ownerid], szName, 16);
+
         switch(g_EntArray[index][ent_mode])
         {
-            case 1: FormatEx(szGameText, 256, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+            case 1: FormatEx(szGameText, 256, "%s[R]: %s", g_EntArray[index][ent_name], szName);
             case 2:
             {
                 if(g_EntArray[index][ent_cooldowntime] <= 0)
-                    FormatEx(szGameText, 256, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+                    FormatEx(szGameText, 256, "%s[R]: %s", g_EntArray[index][ent_name], szName);
                 else
-                    FormatEx(szGameText, 256, "%s[%d]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime], g_EntArray[index][ent_ownerid]);
+                    FormatEx(szGameText, 256, "%s[%d]: %s", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime], szName);
             }
             case 3:
             {
                 if(g_EntArray[index][ent_maxuses] > g_EntArray[index][ent_uses])
-                    FormatEx(szGameText, 256, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+                    FormatEx(szGameText, 256, "%s[R]: %s", g_EntArray[index][ent_name], szName);
                 else
-                    FormatEx(szGameText, 256, "%s[N]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+                    FormatEx(szGameText, 256, "%s[N]: %s", g_EntArray[index][ent_name], szName);
             }
             case 4:
             {
                 if(g_EntArray[index][ent_cooldowntime] <= 0)
                 {
                     if(g_EntArray[index][ent_maxuses] > g_EntArray[index][ent_uses])
-                        FormatEx(szGameText, 256, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+                        FormatEx(szGameText, 256, "%s[R]: %s", g_EntArray[index][ent_name], szName);
                     else
-                        FormatEx(szGameText, 256, "%s[N]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+                        FormatEx(szGameText, 256, "%s[N]: %s", g_EntArray[index][ent_name], szName);
                 }
                 else
-                    FormatEx(szGameText, 256, "%s[%d]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime], g_EntArray[index][ent_ownerid]);
+                    FormatEx(szGameText, 256, "%s[%d]: %s", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime], szName);
             }
             case 5:
             {
                 if(g_EntArray[index][ent_cooldowntime] <= 0)
-                    FormatEx(szGameText, 256, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+                    FormatEx(szGameText, 256, "%s[R]: %s", g_EntArray[index][ent_name], szName);
                 else
-                    FormatEx(szGameText, 256, "%s[%d]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime], g_EntArray[index][ent_ownerid]);
+                    FormatEx(szGameText, 256, "%s[%d]: %s", g_EntArray[index][ent_name], g_EntArray[index][ent_cooldowntime], szName);
             }
-            default: FormatEx(szGameText, 256, "%s[R]: %N", g_EntArray[index][ent_name], g_EntArray[index][ent_ownerid]);
+            default: FormatEx(szGameText, 256, "%s[R]: %s", g_EntArray[index][ent_name], szName);
         }
 
         CS_SetClientClanTag(g_EntArray[index][ent_ownerid], szClantag);
