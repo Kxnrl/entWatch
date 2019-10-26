@@ -37,6 +37,7 @@
 #include <fys.menu>
 #include <fys.bans>
 #include <adminmenu>
+#include <leader>
 #define REQUIRE_PLUGIN
 
 // load translations
@@ -69,8 +70,6 @@ public Plugin myinfo =
 #define HUMANS   1
 #define GLOBAL   0
 #define COOLDN   1
-
-
 
 enum struct CEntity
 {
@@ -182,6 +181,9 @@ static TopMenuObject entwatch_commands = INVALID_TOPMENUOBJECT;
 // bans
 static bool g_pfysAdminSys;
 
+// leader
+static bool g_pLeader3Sys;
+
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
     RegPluginLibrary("entWatch");
@@ -271,23 +273,6 @@ public void OnPluginStart()
 
     if(g_bLateload)
     {
-        g_bLateload = false;
-
-        if(LibraryExists("dhooks"))
-            OnLibraryAdded("dhooks");
-
-        if(LibraryExists("clientprefs"))
-            OnLibraryAdded("clientprefs");
-
-        if(LibraryExists("fys-Opts"))
-            OnLibraryAdded("fys-Opts");
-
-        if(LibraryExists("fys-Bans"))
-            OnLibraryAdded("fys-Bans");
-
-        if(LibraryExists("adminmenu"))
-            OnLibraryAdded("adminmenu");
-
         for(int client = 1; client <= MaxClients; ++client)
         if(ClientIsValid(client))
         {
@@ -298,6 +283,30 @@ public void OnPluginStart()
             if(g_pfysOptions && Opts_IsClientLoaded(client))
                 Opts_OnClientLoad(client);
         }
+    }
+}
+
+public void OnAllPluginsLoaded()
+{
+    if(LibraryExists("dhooks"))
+        OnLibraryAdded("dhooks");
+
+    if(LibraryExists("clientprefs"))
+        OnLibraryAdded("clientprefs");
+
+    if(LibraryExists("fys-Bans"))
+        OnLibraryAdded("fys-Bans");
+
+    if(LibraryExists("leader"))
+        OnLibraryAdded("leader");
+
+    if(g_bLateload)
+    {
+        if(LibraryExists("fys-Opts"))
+            OnLibraryAdded("fys-Opts");
+
+        if(LibraryExists("adminmenu"))
+            OnLibraryAdded("adminmenu");
     }
 }
 
@@ -348,6 +357,10 @@ public void OnLibraryAdded(const char[] name)
     {
         g_pfysAdminSys = true;
     }
+    else if(strcmp(name, "fys-Bans") == 0)
+    {
+        g_pLeader3Sys = true;
+    }
     else if(LibraryExists("fys-Menu"))
     {
         TopMenu menu = Menu_GetAdminMenu();
@@ -385,6 +398,10 @@ public void OnLibraryRemoved(const char[] name)
     else if(strcmp(name, "fys-Bans") == 0)
     {
         g_pfysAdminSys = false;
+    }
+    else if(strcmp(name, "fys-Bans") == 0)
+    {
+        g_pLeader3Sys = false;
     }
 }
 
@@ -695,8 +712,8 @@ public void OnClientDisconnect(int client)
                     RequestFrame(SetWeaponGlow, index);
                 }
 
-                if(g_CEntity[index].ent_buttonid != -1)
-                    SDKUnhook(g_CEntity[index].ent_buttonid, SDKHook_Use, Event_ButtonUse);
+                //if(g_CEntity[index].ent_buttonid != -1)
+                //    SDKUnhook(g_CEntity[index].ent_buttonid, SDKHook_Use, Event_ButtonUse);
 
                 Call_StartForward(g_Forward.OnDropped);
                 Call_PushCell(client);
@@ -717,6 +734,8 @@ public void OnClientDisconnect(int client)
 
         RefreshHud();
     }
+    
+    g_bHasEnt[client] = false;
 
     if (IsPlayerAlive(client))
         StripWeapon(client, true);
@@ -863,8 +882,8 @@ static void DropClientEnt(int client)
 
             g_CEntity[index].ent_ownerid = -1;
 
-            if(g_CEntity[index].ent_buttonid != -1)
-                SDKUnhook(g_CEntity[index].ent_buttonid, SDKHook_Use, Event_ButtonUse);
+            //if(g_CEntity[index].ent_buttonid != -1)
+            //    SDKUnhook(g_CEntity[index].ent_buttonid, SDKHook_Use, Event_ButtonUse);
 
             Call_StartForward(g_Forward.OnDropped);
             Call_PushCell(client);
@@ -929,6 +948,25 @@ static void Event_CreatedPost(int entity)
             {
                 g_CEntity[index].ent_weaponref = EntIndexToEntRef(entity);
                 RequestFrame(SetWeaponGlow, index);
+                if(g_CEntity[index].ent_buttonid == -1 && g_CEntity[index].ent_mode > 0 && strcmp(g_CEntity[index].ent_buttonclass, "func_button", false) == 0)
+                {
+                    char buffer_targetname[32], buffer_parentname[32];
+                    GetEntityTargetName(entity, buffer_targetname, 32);
+
+                    int button = -1;
+                    while((button = FindEntityByClassname(button, g_CEntity[index].ent_buttonclass)) != -1)
+                    {
+                        GetEntityParentName(button, buffer_parentname, 32);
+
+                        if(strcmp(buffer_targetname, buffer_parentname) == 0)
+                        {
+                            SDKHookEx(button, SDKHook_Use, Event_ButtonUse);
+                            g_CEntity[index].ent_buttonid = button;
+                            //LogMessage("%N first picked %d:%d", client, weapon, button);
+                            break;
+                        }
+                    }
+                }
                 //PrintToServer("Event_WeaponCreated -> %d -> Validate -> %d", entity, index);
                 break;
             }
@@ -979,14 +1017,18 @@ public void Event_WeaponEquipPost(int client, int weapon)
     RemoveWeaponGlow(index);
 
     g_bHasEnt[client] = true;
-    g_iScores[client] = 999 - CS_GetClientContributionScore(client);
+    g_iScores[client] = 99966 - CS_GetClientContributionScore(client);
     g_fPickup[client] = GetGameTime();
 
-    CS_SetClientContributionScore(client, 999);
+    int leader = g_pLeader3Sys ? Leader_CurrentLeader() : -1;
+    if (leader != client)
+    CS_SetClientContributionScore(client, 99966);
 
-    if(IsValidEdict(g_CEntity[index].ent_buttonid))
-        SDKHookEx(g_CEntity[index].ent_buttonid, SDKHook_Use, Event_ButtonUse);
-    else if(g_CEntity[index].ent_buttonid == -1 && g_CEntity[index].ent_mode > 0 && strcmp(g_CEntity[index].ent_buttonclass, "func_button", false) == 0)
+    //if(IsValidEdict(g_CEntity[index].ent_buttonid))
+    //    SDKHookEx(g_CEntity[index].ent_buttonid, SDKHook_Use, Event_ButtonUse);
+    //else 
+
+    if(g_CEntity[index].ent_buttonid == -1 && g_CEntity[index].ent_mode > 0 && strcmp(g_CEntity[index].ent_buttonclass, "func_button", false) == 0)
     {
         char buffer_targetname[32], buffer_parentname[32];
         GetEntityTargetName(weapon, buffer_targetname, 32);
@@ -1251,8 +1293,8 @@ public void Event_WeaponDropPost(int client, int weapon)
 
                 g_CEntity[index].ent_ownerid = -1;
                 
-                if(g_CEntity[index].ent_buttonid != -1)
-                    SDKUnhook(g_CEntity[index].ent_buttonid, SDKHook_Use, Event_ButtonUse);
+                //if(g_CEntity[index].ent_buttonid != -1)
+                //    SDKUnhook(g_CEntity[index].ent_buttonid, SDKHook_Use, Event_ButtonUse);
 
 #if defined USE_TRANSLATIONS
                 tChatTeam(g_CEntity[index].ent_team, true, "%t", "droped ent", client, g_CEntity[index].ent_name);
@@ -1302,7 +1344,10 @@ static void SetClientDefault(int client)
 
     g_bHasEnt[client] = false;
 
+    int leader = g_pLeader3Sys ? Leader_CurrentLeader() : -1;
+    if (leader != client)
     CS_SetClientContributionScore(client, CS_GetClientContributionScore(client) - g_iScores[client]);
+
     CS_SetClientClanTag(client, g_szClantag[client]);
 
     //DispatchKeyValue(client, "targetname", "human");
@@ -1561,7 +1606,10 @@ public Action Timer_Cooldowns(Handle timer)
         g_tCooldown = null;
         return Plugin_Stop;
     }
-    
+
+    for(int index = 0; index < MAXPLAYERS; index++)
+        g_bHasEnt[index] = false;
+
     for(int index = 0; index < g_iEntCounts; index++)
         if(g_CEntity[index].ent_cooldowntime > 0)
             g_CEntity[index].ent_cooldowntime--;
@@ -1573,8 +1621,8 @@ public Action Timer_Cooldowns(Handle timer)
 
 static void RefreshHud()
 {
-    strcopy(g_szGlobalHud[ZOMBIE], 4096, "[!ehud] Zombie: ");
-    strcopy(g_szGlobalHud[HUMANS], 4096, "[!ehud] Humans: ");
+    strcopy(g_szGlobalHud[ZOMBIE], 4096, "[!ehud]:");
+    strcopy(g_szGlobalHud[HUMANS], 4096, "[!ehud]:");
 
     for(int index = 0; index < g_iEntCounts; index++)
     {
@@ -1582,11 +1630,11 @@ static void RefreshHud()
         BuildHUDandScoreboard(index);
     }
 
-    if(strcmp(g_szGlobalHud[ZOMBIE], "[!ehud] Zombie: ") == 0)
+    if(strcmp(g_szGlobalHud[ZOMBIE], "[!ehud]:") == 0)
         g_szGlobalHud[ZOMBIE][0] = '\0';
         //Format(g_szGlobalHud[ZOMBIE], 4096, "%s\n", g_szGlobalHud[ZOMBIE]);
 
-    if(strcmp(g_szGlobalHud[HUMANS], "[!ehud] Humans: ") == 0)
+    if(strcmp(g_szGlobalHud[HUMANS], "[!ehud]:") == 0)
         g_szGlobalHud[HUMANS][0] = '\0';
         //Format(g_szGlobalHud[HUMANS], 4096, "%s\n", g_szGlobalHud[HUMANS]);
 
@@ -1675,13 +1723,17 @@ public Action Timer_RefreshGlow(Handle timer, int index)
 
 static void BuildHUDandScoreboard(int index)
 {
+    bool alive = ClientIsAlive(g_CEntity[index].ent_ownerid);
+    if (alive)
+        g_bHasEnt[g_CEntity[index].ent_ownerid] = true;
+
     if(!g_CEntity[index].ent_displayhud)
         return;
 
     char szClantag[32], szGameText[256], szName[16];
     strcopy(szClantag, 32, g_CEntity[index].ent_short);
 
-    if(ClientIsAlive(g_CEntity[index].ent_ownerid))
+    if(alive)
     {
         GetClientName(g_CEntity[index].ent_ownerid, szName, 16);
 
@@ -1784,7 +1836,7 @@ public Action Command_Stats(int client, int args)
 
 public Action Command_DisplayHud(int client, int args)
 {
-    if(!AreClientCookiesCached(client))
+    if((g_pClientPrefs && !AreClientCookiesCached(client)) || (g_pfysOptions && !Opts_IsClientLoaded(client)))
     {
 #if defined USE_TRANSLATIONS
         Chat(client, "%T", "ent data not cached", client);
@@ -2143,8 +2195,8 @@ static void TransferClientEnt(int client, int target, bool autoTransfer = false)
             char buffer_classname[64];
             GetEdictClassname(weapon, buffer_classname, 64);
 
-            if(g_CEntity[index].ent_buttonid != -1)
-                SDKUnhook(g_CEntity[index].ent_buttonid, SDKHook_Use, Event_ButtonUse);
+            //if(g_CEntity[index].ent_buttonid != -1)
+            //    SDKUnhook(g_CEntity[index].ent_buttonid, SDKHook_Use, Event_ButtonUse);
             
             SDKHooks_DropWeapon(target, weapon);
             GivePlayerItem(target, buffer_classname);
@@ -2174,8 +2226,8 @@ static void TransferClientEnt(int client, int target, bool autoTransfer = false)
 
             RemoveWeaponGlow(index);
 
-            if(g_CEntity[index].ent_buttonid != -1)
-                SDKHookEx(g_CEntity[index].ent_buttonid, SDKHook_Use, Event_ButtonUse);
+            //if(g_CEntity[index].ent_buttonid != -1)
+            //    SDKHookEx(g_CEntity[index].ent_buttonid, SDKHook_Use, Event_ButtonUse);
 
             if(g_CEntity[index].ent_hasfiltername)
                 DispatchKeyValue(client, "targetname", g_CEntity[index].ent_filtername);
@@ -2184,11 +2236,12 @@ static void TransferClientEnt(int client, int target, bool autoTransfer = false)
             CreateIcon(client);
 #endif 
 
-            g_bHasEnt[client] = true;
-            g_iScores[client] = 999 - CS_GetClientContributionScore(client);
+            g_iScores[client] = 99966 - CS_GetClientContributionScore(client);
             g_fPickup[client] = GetGameTime();
 
-            CS_SetClientContributionScore(client, 999);
+            int leader = g_pLeader3Sys ? Leader_CurrentLeader() : -1;
+            if (leader != client)
+            CS_SetClientContributionScore(client, 99966);
 
             Call_StartForward(g_Forward.OnDropped);
             Call_PushCell(target);
@@ -2514,6 +2567,8 @@ static void SetGlowColor(int entity, int r, int g, int b)
 
 static void AddClientScore(int client, int score)
 {
+    int leader = g_pLeader3Sys ? Leader_CurrentLeader() : -1;
+    if (leader != client)
     CS_SetClientContributionScore(client, CS_GetClientContributionScore(client) + score);
 }
 
