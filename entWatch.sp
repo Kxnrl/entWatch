@@ -904,7 +904,20 @@ static void DropClientEnt(int client)
 
 public void Event_PlayerTeams(Event e, const char[] name, bool dontBroadcast)
 {
-    g_iTeam[GetClientOfUserId(e.GetInt("userid"))] = e.GetInt("team");
+    if (e.GetBool("disconnect"))
+        return;
+
+    int client = GetClientOfUserId(e.GetInt("userid"));
+    int nxteam = e.GetInt("team");
+    int prteam = e.GetInt("oldteam");
+
+    g_iTeam[client] = nxteam;
+
+    if (nxteam == CS_TEAM_SPECTATOR && prteam >= CS_TEAM_T)
+    {
+        // force DROP
+        DropClientEnt(client);
+    }
 }
 
 public void OnEntityCreated(int entity, const char[] classname)
@@ -1330,7 +1343,7 @@ public void Event_WeaponDropPost(int client, int weapon)
 
 public Action Event_SetTransmit(int entity, int client)
 {
-    if(g_iEntTeam[entity] <= 1 || g_iTeam[client] <= 1)
+    if(g_iEntTeam[entity] <= 1 || g_iTeam[client] <= CS_TEAM_SPECTATOR)
         return Plugin_Continue;
 
     return g_iEntTeam[entity] == g_iTeam[client] ? Plugin_Continue : Plugin_Handled;
@@ -2630,7 +2643,7 @@ static bool IsInfector(int client)
     if(g_pZombieReload)
         return ZR_IsClientZombie(client);
 
-    return (g_iTeam[client] == 2);
+    return (g_iTeam[client] == CS_TEAM_T);
 }
 
 #if defined AUTO_HIDERADAR
