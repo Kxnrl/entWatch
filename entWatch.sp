@@ -1017,8 +1017,13 @@ public void Event_WeaponEquipPost(int client, int weapon)
 
     g_CEntity[index].ent_team = g_iTeam[client];
     
-    if(!g_CEntity[index].ent_pickedup)
-        g_CEntity[index].ent_cooldowntime = g_CEntity[index].ent_startcd;
+	if(!g_CEntity[index].ent_pickedup)
+	{
+		if(g_CEntity[index].ent_startcd != 0)
+			g_CEntity[index].ent_cooldowntime = g_CEntity[index].ent_startcd;
+		else
+			g_CEntity[index].ent_cooldowntime = -1;
+	}
 
     g_CEntity[index].ent_ownerid   = client;
     g_CEntity[index].ent_pickedup  = true;
@@ -1495,7 +1500,7 @@ public Action Event_ButtonUse(int button, int activator, int caller, UseType typ
         AddClientScore(activator, 1);
         return Plugin_Continue;
     }
-    else if(g_CEntity[index].ent_mode == 2 && g_CEntity[index].ent_cooldowntime <= 0)
+    else if(g_CEntity[index].ent_mode == 2 && g_CEntity[index].ent_cooldowntime <= -1)
     {
         g_CEntity[index].ent_cooldowntime = g_CEntity[index].ent_cooldown;
 
@@ -1525,7 +1530,7 @@ public Action Event_ButtonUse(int button, int activator, int caller, UseType typ
         
         return Plugin_Continue;
     }
-    else if(g_CEntity[index].ent_mode == 4 && g_CEntity[index].ent_uses < g_CEntity[index].ent_maxuses && g_CEntity[index].ent_cooldowntime <= 0)
+    else if(g_CEntity[index].ent_mode == 4 && g_CEntity[index].ent_uses < g_CEntity[index].ent_maxuses && g_CEntity[index].ent_cooldowntime <= -1)
     {
         g_CEntity[index].ent_cooldowntime = g_CEntity[index].ent_cooldown;
         g_CEntity[index].ent_uses++;
@@ -1541,7 +1546,7 @@ public Action Event_ButtonUse(int button, int activator, int caller, UseType typ
 
         return Plugin_Continue;
     }
-    else if(g_CEntity[index].ent_mode == 5 && g_CEntity[index].ent_cooldowntime <= 0)
+    else if(g_CEntity[index].ent_mode == 5 && g_CEntity[index].ent_cooldowntime <= -1)
     {
 #if defined USE_TRANSLATIONS
         tChatTeam(g_CEntity[index].ent_team, true, "%t", "used ent and times cd", activator, g_CEntity[index].ent_name, g_CEntity[index].ent_maxuses-g_CEntity[index].ent_uses);
@@ -1624,7 +1629,7 @@ public Action Timer_Cooldowns(Handle timer)
         g_bHasEnt[index] = false;
 
     for(int index = 0; index < g_iEntCounts; index++)
-        if(g_CEntity[index].ent_cooldowntime > 0)
+        if(g_CEntity[index].ent_cooldowntime >= 0)
             g_CEntity[index].ent_cooldowntime--;
 
     RefreshHud();
